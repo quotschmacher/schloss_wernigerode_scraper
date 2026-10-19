@@ -12,7 +12,7 @@ Hermes Agent lädt `AGENTS.md` als Projektkontext; alternativ sind `.hermes.md` 
 2. Ein Terminal **im Projektordner** öffnen und Hermes Agent starten.
 3. Folgenden Auftrag an Hermes senden:
 
-> Lies `AGENTS.md` und `PROJECT_SPEC.md` vollständig. Setze das beschriebene Python-Projekt bis zur lauffähigen Version um, inklusive Playwright-Scraper, SQLite-Differenzvergleich, Konsolenausgabe, Tests, `.devcontainer`, `Dockerfile` und `compose.yaml`. Inspiziere zuerst die tatsächlichen DOM-Strukturen und die öffentliche Ticketanzeige. Führe Tests und Docker-Build aus. Kennzeichne unbekannte Restplatzanzahlen korrekt, statt Zahlen zu erfinden. Telegram bleibt deaktiviert. Dokumentiere verbleibende Einschränkungen.
+> Lies `AGENTS.md` und `PROJECT_SPEC.md` vollständig. Setze das beschriebene Python-Projekt bis zur lauffähigen Version um, inklusive Playwright-Scraper, SQLite-Differenzvergleich, Konsolenausgabe, Tests, `.devcontainer`, `Dockerfile` und `compose.yaml`. Inspiziere zuerst die tatsächlichen DOM-Strukturen und die öffentliche Ticketanzeige. Führe Tests und Linter ausschließlich über Docker Compose bzw. im Devcontainer aus, installiere nichts auf dem Host und erstelle keine venv. Kennzeichne unbekannte Restplatzanzahlen korrekt, statt Zahlen zu erfinden. Telegram bleibt deaktiviert. Dokumentiere verbleibende Einschränkungen.
 
 4. Hermes soll die `config.example.toml` als Ausgangspunkt nach `config.toml` übernehmen und `.env.example` als Vorlage nutzen.
 
@@ -28,26 +28,35 @@ Ein einzelner Monitor benötigt keinen separaten Server. SQLite merkt sich pro D
 
 Auf der Schloss-Website steht, dass der Terminkalender nicht mit dem Buchungsportal synchronisiert ist. Die konkrete freie Ticketzahl muss im öffentlichen Buchungsportal nachvollziehbar ermittelt werden. Nur die Tatsache, dass man „buchen“ klicken kann, beweist noch keine bestimmte Zahl freier Plätze.
 
-## Geplante Bedienung *nach* Implementierung
+## Geplante Bedienung *nach* Implementierung – ausschließlich in Docker
+
+Auf dem Host wird **kein Python, pip, Playwright, pytest, ruff oder venv** benötigt. Die Befehle unten werden vom Host aus ausgeführt, starten aber alle Python-Prozesse im `dev`- bzw. `monitor`-Container.
 
 ```bash
-# Einmalig, zum Testen
-python -m schloss_monitor --once
+# Entwicklungsimage inklusive Testtools/Chromium bauen
+docker compose --profile dev build dev
 
-# Unit-Tests
-pytest
+# Unit-Tests ausschließlich im Entwicklungscontainer
+docker compose --profile dev run --rm dev pytest -q
 
-# Lint
-ruff check .
+# Lint ausschließlich im Entwicklungscontainer
+docker compose --profile dev run --rm dev ruff check .
 
-# Container starten
-docker compose up -d --build
+# Einmaliger Live-Scan im Entwicklungscontainer
+docker compose --profile dev run --rm dev python -m schloss_monitor --once
+
+# Dauerbetrieb in der Produktion starten
+docker compose up -d --build monitor
 
 # Live-Ausgabe verfolgen
 docker compose logs -f monitor
 
-# Container stoppen
+# Dauerbetrieb stoppen
 docker compose down
 ```
+
+Alternativ in VS Code **„Reopen in Container“** öffnen. Dort darfst du `pytest`, `ruff check .` oder `python -m schloss_monitor --once` direkt im **Devcontainer-Terminal** ausführen. Das ist kein Host-Python.
+
+**Kein venv erstellen.** Entwicklungspakete gehören in den Build-Schritt des Entwicklungs-Docker-Images. Der Devcontainer nutzt den Compose-Service `dev` und startet beim Öffnen keinen Monitor.
 
 Diese Befehle funktionieren erst, nachdem Hermes die im Auftrag geforderten Dateien und den Code erstellt hat.

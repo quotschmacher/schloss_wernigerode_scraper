@@ -187,12 +187,12 @@ Dies ist ein **Konfigurationsbeispiel**; Hermes muss eine vollständig lauffähi
 
 ## 8. Devcontainer / Docker
 
-- VS-Code-kompatible `.devcontainer/devcontainer.json`; Python 3.12+, pip/venv, Playwright Chromium inkl. OS-Abhängigkeiten, pytest und ruff müssen funktionieren.
-- `postCreateCommand` installiert Projekt und Browser. VS Code kann ohne externes Redis und ohne Host-Browser starten.
-- Devcontainer startet **keinen Endlosprozess** automatisch. Entwickler kann `python -m schloss_monitor --once`, `pytest` und `ruff check .` ausführen.
+- VS-Code-kompatible `.devcontainer/devcontainer.json`, das den Docker-Compose-Service `dev` verwendet. Python 3.12+, Playwright/Chromium inkl. OS-Abhängigkeiten, `pytest` und `ruff` befinden sich **im Entwicklungs-Image**. Die Image-Targets `development` und `production` dürfen denselben Anwendungsstand nutzen.
+- Abhängigkeiten und Browser werden beim **Docker-Image-Build** installiert, **keine venv/virtualenv/.venv** (weder auf dem Host noch im Container). `postCreateCommand` darf **keine** venv erzeugen und soll nichts mehr installieren. Keine `pip`, `pytest`, `ruff` oder Python-Ausführung auf dem Host.
+- Devcontainer startet **keinen Endlosprozess** automatisch. **Im Devcontainer-Terminal** sind `python -m schloss_monitor --once`, `pytest` und `ruff check .` erlaubt, weil diese Befehle dort im Container laufen. Vom Host aus ausschließlich via `docker compose --profile dev run --rm dev ...`.
 - Produktions-`Dockerfile` enthält Playwright-Browser und native Bibliotheken. Reproduzierbare Abhängigkeiten, sinnvoller nicht-root-Betrieb, keine nicht notwendigen Netzwerkports.
-- `compose.yaml`: `restart: unless-stopped`, Volume für `/data`, Environment-Overrides, `init: true`, Log-Ausgabe stdout. Container soll nach `docker compose up -d --build` dauerhaft monitoren.
-- README beschreibt `docker compose up -d --build`, `docker compose logs -f monitor`, `docker compose down`, `docker compose exec monitor ...` sowie die Änderung des Intervalls über `.env`.
+- `compose.yaml`: `monitor` (Standardservice mit `restart: unless-stopped`, Volume für `/data`, Environment-Overrides, `init: true`, stdout) sowie `dev` (Compose-Profil `dev`, Quellcode als Bind-Mount, interaktive Entwicklung, kein Endlosprozess). Nur `monitor` wird durch `docker compose up -d --build monitor` dauerhaft gestartet.
+- README beschreibt `docker compose --profile dev build dev`, `docker compose --profile dev run --rm dev pytest -q`, `docker compose --profile dev run --rm dev ruff check .`, `docker compose --profile dev run --rm dev python -m schloss_monitor --once`, `docker compose up -d --build monitor`, `docker compose logs -f monitor`, `docker compose down` sowie Intervall-Overrides über `.env`. **Keine Host-Python-Befehle als Setup-/Testschritte.**
 
 ## 9. Telegram (noch ohne Versand)
 
@@ -220,7 +220,7 @@ Erstelle unabhängige Tests für mindestens:
 - [ ] Konfiguration aus TOML und Override mit Compose-Env.
 - [ ] `--once` beendet sich; Normalmodus wird durch SIGTERM sauber beendet.
 - [ ] Telegram wird in keinem Test/Produktionsfall real kontaktiert.
-- [ ] Docker-Image baubar, Devcontainer als Entwicklungsumgebung nutzbar.
+- [ ] Docker-Images für Entwicklung und Produktion baubar; Devcontainer als Entwicklungsumgebung nutzbar; alle Tests/Lints im Container ausgeführt; keine `.venv` oder Host-Python-Installation.
 
 ### Live-Abnahme
 
@@ -242,4 +242,4 @@ Ein sorgfältig ausgeführter Live-Smoketest bestätigt den DOM-/Navigationsflus
 5. Devcontainer, Produktions-Dockerfile, Compose und README.
 6. Tests/Live-Smoke, verbleibende Einschränkungen dokumentieren.
 
-Am Ende muss ein Entwickler das Repository öffnen, Tests lokal oder im Devcontainer starten und den Monitor mittels `docker compose up -d --build` betreiben können, ohne Quellcode oder Warteintervalle anzupassen.
+Am Ende muss ein Entwickler das Repository öffnen, Tests **im Devcontainer oder über `docker compose --profile dev run --rm dev ...`** starten und den Monitor mittels `docker compose up -d --build monitor` betreiben können. Auf dem Host sind dafür nur Docker/Compose und ein Editor erforderlich, weder lokales Python noch eine virtuelle Umgebung.
