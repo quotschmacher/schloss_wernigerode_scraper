@@ -1,0 +1,21 @@
+# Vorlage: Hermes erstellt daraus die finale config.toml.
+[monitor]
+interval_seconds = 3600
+run_immediately = true
+timezone = "Europe/Berlin"
+
+[scraper]
+url = "https://www.schloss-wernigerode.de/kalender/die-schule-der-magischen-tiere#termine"
+headless = true
+navigation_timeout_ms = 30000
+max_load_more_clicks = 100
+request_delay_seconds = 1.5
+
+[storage]
+db_path = "data/appointments.sqlite3"
+
+[logging]
+level = "INFO"
+
+[telegram]
+enabled = false
