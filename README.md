@@ -1,6 +1,6 @@
-# Schloss-Monitor – Hermes-Agent-Auftrag
+# Schloss Wernigerode Terminmonitor
 
-Dieses Paket enthält **noch keinen implementierten Scraper**, sondern die fertigen Projektanweisungen, aus denen Hermes Agent das vollständige Python-Projekt erstellen soll.
+Read-only Playwright monitor for the public appointments of “Die Schule der magischen Tiere – Besichtigung Drehorte”. Every successful scan prints the current free slots to the console, even when the SQLite snapshot has not changed. Change events remain available primarily for a future Telegram notifier. Telegram is architecturally prepared but is an enforced no-op: this version never sends a Telegram request.
 
 ## Welche Datei verwendet Hermes?
 
@@ -22,7 +22,7 @@ Die Ausgangsseite verfügt über „weitere Termine laden“, einzelne Veranstal
 
 ## Warum SQLite?
 
-Ein einzelner Monitor benötigt keinen separaten Server. SQLite merkt sich pro Datum und Uhrzeit den letzten bestätigten Bestand über Docker-Restarts hinweg, sodass nur Neuigkeiten und Änderungen ausgegeben werden.
+Ein einzelner Monitor benötigt keinen separaten Server. SQLite merkt sich pro Datum und Uhrzeit den letzten bestätigten Bestand über Docker-Restarts hinweg, während die Konsole bei jedem erfolgreichen Scan die aktuell freien Slots ausgibt.
 
 ## Wesentliche Einschränkung
 
@@ -59,4 +59,10 @@ Alternativ in VS Code **„Reopen in Container“** öffnen. Dort darfst du `pyt
 
 **Kein venv erstellen.** Entwicklungspakete gehören in den Build-Schritt des Entwicklungs-Docker-Images. Der Devcontainer nutzt den Compose-Service `dev` und startet beim Öffnen keinen Monitor.
 
-Diese Befehle funktionieren erst, nachdem Hermes die im Auftrag geforderten Dateien und den Code erstellt hat.
+The project is implemented. `dev` is the Compose-profiled development/test service. `monitor` persists SQLite at `./data/appointments.sqlite3` through the project-relative host bind mount `./data:/data`; it exposes no ports. The Compose service runs as root so the bind mount remains writable on Docker Desktop for Windows.
+
+Configuration lives in `config.toml`; the supported environment overrides are `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, and `MONITOR_CONFIG_FILE`. Copy `.env.example` to `.env` for Compose interpolation. The default scan interval is 3600 seconds.
+
+Availability is exact only when Ticketfritz's observed read-only `getEvents` response supplies `AnzahlFrei` or `MengeAktuellVerfuegbar` for the matching time. Capacity, cart limits, and price maxima are never treated as availability. When no exact field is available, the monitor records and prints an explicitly unknown count. No reservation, cart, checkout, login, or payment interaction is implemented.
+
+`docs/site-findings.md` documents the real DOM/network inspection from 19 October 2026, including live-flow limitations. Unit tests use stored fixtures and do not depend on the public sites.

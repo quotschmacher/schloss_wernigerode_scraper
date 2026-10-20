@@ -18,7 +18,7 @@ Ein Python-Monitor prüft in einer Endlosschleife öffentliche Führungstermine 
 6. Öffentliche Buchungsansicht dieses Slots lesen. Exakte Ticket-Restmenge nur aus einer belastbaren Anzeige oder nachvollziehbar bestätigten Read-only-Daten übernehmen. Sind lediglich auswählbare Menge, Obergrenze (auf der Webseite wird für diese Führung 18 genannt) oder `verfügbar` ohne Zahl sichtbar, ist die Anzahl **unbekannt**.
 7. Aggregierte, nach Datum/Uhrzeit sortierte Ergebnisliste erzeugen. Strukturiertes Modell mit `event_key`, `start_at`, `status`, `available_places: int | None`, `detail_url`, `booking_url`, `observed_at`, `source_of_count`.
 8. Ergebnis auf Vollständigkeit prüfen. Nur bei verlässlich erfolgreichem Scan mit SQLite vergleichen und den neuen Zustand atomar persistieren.
-9. Änderungen ausgeben (siehe Abschnitt 4). Beim ersten erfolgreichen Scan jede tatsächlich verfügbare Einzelveranstaltung einmal ausgeben; falls exakte Zahl nicht ermittelbar ist, `Anzahl unbekannt` ausgeben, niemals raten.
+9. Bei jedem erfolgreichen Scan die aktuell freien Einzeltermine nach Datum/Uhrzeit in der **Konsolenausgabe** ausgeben – auch ohne Zustandsänderung. Exakte Werte und unbekannte Mengen klar unterscheiden. Änderungsereignisse werden zusätzlich erzeugt und dienen primär als Übergabepunkt für die spätere Telegram-Anbindung.
 10. Nach abgeschlossenem Scan die konfigurierte Zeit in Sekunden pausieren, dann von vorn beginnen. Bei Scanfehler ebenfalls mit Backoff warten, ohne zuvor gespeicherte Bestände zu überschreiben.
 
 ### Beispiel: gemischte Detailseite
@@ -53,13 +53,17 @@ Keinesfalls 11:30 und 14:00 unter einem einzigen Datensatz zusammenfassen.
 - **Zeit:** `start_at` in lokaler Zone `Europe/Berlin`; `first_seen_at`, `last_seen_at`, `last_changed_at` in UTC.
 - **Quellen:** Detail- und Buchungslink; dokumentierte Quelle der verfügbaren Menge (falls vorhanden).
 
-### Ausgabe bei erstem erfolgreichen Scan
+### Ausgabe bei jedem erfolgreichen Scan
 
-- Alle belegbar freien Einzeltermine mit Uhrzeit, ggf. exakter Platzzahl, URL.
-- Unbekannte Mengen deutlich kennzeichnen.
-- Bei keinerlei freien Slots nur eine Scan-Zusammenfassung (`keine freien Termine gefunden`).
+- Die Konsole gibt immer alle aktuell bestätigten freien Einzeltermine mit Uhrzeit, ggf. exakter Platzzahl und URL aus, auch wenn keine Zustandsänderung vorliegt.
+- Unbekannte Mengen werden deutlich gekennzeichnet.
+- Bei keinerlei freien Slots wird `keine freien Termine gefunden` ausgegeben.
 
-### Ausgabe bei späteren erfolgreichen Scans
+### Änderungsereignisse
+
+- Änderungsereignisse bleiben Bestandteil des Modells und der SQLite-Differenzierung.
+- Sie sind primär für spätere Notifier wie Telegram vorgesehen; eine unveränderte Verfügbarkeit darf deshalb niemals die normale Slot-Übersicht unterdrücken.
+
 
 | Ereignis | Wann? | Darstellung |
 |---|---|---|
@@ -122,7 +126,7 @@ CREATE TABLE IF NOT EXISTS scan_runs (
 ```
 
 - Schema darf für History/Status erweitert werden, aber keine unnötig komplexe Infrastruktur.
-- Die DB muss Neustarts/Neu-Builds überleben (`./data:/data` oder benanntes Docker-Volume).
+- Die DB muss Neustarts/Neu-Builds überleben und wird im Standard-Compose über den relativen Host-Bind-Mount `./data:/data` im Projektverzeichnis gespeichert.
 - Ein fehlgeschlagener Scan wird in `scan_runs` protokolliert, darf aber keine falsch-negative Veränderung in `appointments` auslösen.
 - SQLite-Updates atomar ausführen und idempotent halten. Änderungen an demselben Bestand nicht bei jedem Restart erneut melden.
 - Um Zahländerungen nachträglich nachvollziehen zu können, optional zusätzlich `appointment_changes` als Audit-Tabelle anlegen.
@@ -190,8 +194,8 @@ Dies ist ein **Konfigurationsbeispiel**; Hermes muss eine vollständig lauffähi
 - VS-Code-kompatible `.devcontainer/devcontainer.json`, das den Docker-Compose-Service `dev` verwendet. Python 3.12+, Playwright/Chromium inkl. OS-Abhängigkeiten, `pytest` und `ruff` befinden sich **im Entwicklungs-Image**. Die Image-Targets `development` und `production` dürfen denselben Anwendungsstand nutzen.
 - Abhängigkeiten und Browser werden beim **Docker-Image-Build** installiert, **keine venv/virtualenv/.venv** (weder auf dem Host noch im Container). `postCreateCommand` darf **keine** venv erzeugen und soll nichts mehr installieren. Keine `pip`, `pytest`, `ruff` oder Python-Ausführung auf dem Host.
 - Devcontainer startet **keinen Endlosprozess** automatisch. **Im Devcontainer-Terminal** sind `python -m schloss_monitor --once`, `pytest` und `ruff check .` erlaubt, weil diese Befehle dort im Container laufen. Vom Host aus ausschließlich via `docker compose --profile dev run --rm dev ...`.
-- Produktions-`Dockerfile` enthält Playwright-Browser und native Bibliotheken. Reproduzierbare Abhängigkeiten, sinnvoller nicht-root-Betrieb, keine nicht notwendigen Netzwerkports.
-- `compose.yaml`: `monitor` (Standardservice mit `restart: unless-stopped`, Volume für `/data`, Environment-Overrides, `init: true`, stdout) sowie `dev` (Compose-Profil `dev`, Quellcode als Bind-Mount, interaktive Entwicklung, kein Endlosprozess). Nur `monitor` wird durch `docker compose up -d --build monitor` dauerhaft gestartet.
+- Produktions-`Dockerfile` enthält Playwright-Browser und native Bibliotheken. Reproduzierbare Abhängigkeiten und keine nicht notwendigen Netzwerkports. Der Compose-Service darf für den Windows-kompatiblen Host-Bind-Mount `./data:/data` als root laufen; die Anwendung benötigt keine weiteren Berechtigungen oder Ports.
+- `compose.yaml`: `monitor` (Standardservice mit `restart: unless-stopped`, Host-Bind-Mount `./data:/data` für SQLite, Environment-Overrides, `init: true`, stdout) sowie `dev` (Compose-Profil `dev`, Quellcode als Bind-Mount, interaktive Entwicklung, kein Endlosprozess). Nur `monitor` wird durch `docker compose up -d --build monitor` dauerhaft gestartet.
 - README beschreibt `docker compose --profile dev build dev`, `docker compose --profile dev run --rm dev pytest -q`, `docker compose --profile dev run --rm dev ruff check .`, `docker compose --profile dev run --rm dev python -m schloss_monitor --once`, `docker compose up -d --build monitor`, `docker compose logs -f monitor`, `docker compose down` sowie Intervall-Overrides über `.env`. **Keine Host-Python-Befehle als Setup-/Testschritte.**
 
 ## 9. Telegram (noch ohne Versand)

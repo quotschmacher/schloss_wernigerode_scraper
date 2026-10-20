@@ -1,0 +1,38 @@
+services:
+  monitor:
+    build:
+      context: .
+      target: production
+    init: true
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-3600}
+      MONITOR_DB_PATH: /data/appointments.sqlite3
+      MONITOR_HEADLESS: ${MONITOR_HEADLESS:-true}
+      MONITOR_LOG_LEVEL: ${MONITOR_LOG_LEVEL:-INFO}
+      MONITOR_REQUEST_DELAY_SECONDS: ${MONITOR_REQUEST_DELAY_SECONDS:-1.5}
+      MONITOR_TELEGRAM_ENABLED: "false"
+    volumes:
+      - ./data:/data
+
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      target: development
+    init: true
+    working_dir: /workspace
+    environment:
+      PYTHONPATH: /workspace/src
+      MONITOR_DB_PATH: /data/appointments.sqlite3
+      MONITOR_TELEGRAM_ENABLED: "false"
+    volumes:
+      - .:/workspace
+      - dev-data:/data
+    stdin_open: true
+    tty: true
+    command: ["sleep", "infinity"]
+
+volumes:
+  dev-data:
