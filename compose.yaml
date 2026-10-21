@@ -12,7 +12,9 @@ services:
       MONITOR_HEADLESS: ${MONITOR_HEADLESS:-true}
       MONITOR_LOG_LEVEL: ${MONITOR_LOG_LEVEL:-INFO}
       MONITOR_REQUEST_DELAY_SECONDS: ${MONITOR_REQUEST_DELAY_SECONDS:-1.5}
-      MONITOR_TELEGRAM_ENABLED: "false"
+      MONITOR_TELEGRAM_ENABLED: ${MONITOR_TELEGRAM_ENABLED:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./data:/data
 
@@ -26,13 +28,12 @@ services:
     environment:
       PYTHONPATH: /workspace/src
       MONITOR_DB_PATH: /data/appointments.sqlite3
-      MONITOR_TELEGRAM_ENABLED: "false"
+      MONITOR_TELEGRAM_ENABLED: ${MONITOR_TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - .:/workspace
-      - dev-data:/data
+      - ./data:/data
     stdin_open: true
     tty: true
     command: ["sleep", "infinity"]
-
-volumes:
-  dev-data:

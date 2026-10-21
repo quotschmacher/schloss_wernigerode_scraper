@@ -177,8 +177,9 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
         storage.record_failed_scan(str(error))
         raise
     notifier.report_slots(result.appointments)
-    changes = storage.commit_successful_scan(result.appointments, result.protected_dates)
+    changes = storage.preview_successful_scan(result.appointments, result.protected_dates)
     notifier.notify(changes)
+    storage.commit_successful_scan(result.appointments, result.protected_dates)
     LOG.info(
         "scan finished days=%s slots=%s changes=%s",
         result.calendar_days,

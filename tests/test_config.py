@@ -45,6 +45,8 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("MONITOR_LOG_LEVEL", "debug")
     monkeypatch.setenv("MONITOR_REQUEST_DELAY_SECONDS", "2.25")
     monkeypatch.setenv("MONITOR_TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
 
     settings = load_settings(config_file)
 
@@ -54,6 +56,8 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     assert settings.logging.level == "DEBUG"
     assert settings.scraper.request_delay_seconds == 2.25
     assert settings.telegram.enabled is True
+    assert settings.telegram.bot_token == "test-token"
+    assert settings.telegram.chat_id == "123456"
 
 
 def test_invalid_interval_is_rejected(tmp_path: Path) -> None:
@@ -62,3 +66,25 @@ def test_invalid_interval_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigError, match="interval_seconds"):
         load_settings(config_file)
+
+
+def test_enabled_telegram_requires_a_bot_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_file = tmp_path / "config.toml"
+    write_config(config_file)
+    monkeypatch.setenv("MONITOR_TELEGRAM_ENABLED", "true")
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+
+    with pytest.raises(ConfigError, match="TELEGRAM_BOT_TOKEN"):
+        load_settings(config_file)
+
+
+def test_enabled_telegram_requires_a_chat_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_file = tmp_path / "config.toml"
+    write_config(config_file)
+    monkeypatch.setenv("MONITOR_TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    with pytest.raises(ConfigError, match="TELEGRAM_CHAT_ID"):
+        load_settings(config_file)
+

@@ -10,6 +10,13 @@ from pathlib import Path
 from .config import ConfigError, load_settings
 from .monitor import PlaywrightScanner, run_forever, run_once
 from .notifiers.console import ConsoleNotifier
+from .notifiers.fanout import FanoutNotifier
+from .notifiers.telegram import (
+    TelegramApiError,
+    TelegramNotifier,
+    verify_bot_token,
+    verify_chat_access,
+)
 from .storage import MonitorStorage
 
 
@@ -20,12 +27,12 @@ def _arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def _run_until_shutdown(settings, storage: MonitorStorage, scanner: PlaywrightScanner) -> None:
+async def _run_until_shutdown(settings, storage: MonitorStorage, scanner: PlaywrightScanner, notifier) -> None:
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(signum, stop_event.set)
-    await run_forever(settings, storage, scanner, ConsoleNotifier(), stop_event)
+    await run_forever(settings, storage, scanner, notifier, stop_event)
 
 
 def main() -> int:
@@ -38,14 +45,32 @@ def main() -> int:
         logging.error("configuration error: %s", error)
         return 2
     logging.basicConfig(level=settings.logging.level, format="%(asctime)s %(levelname)s %(message)s")
+    if settings.telegram.enabled:
+        try:
+            username = verify_bot_token(settings.telegram.bot_token or "")
+            verify_chat_access(settings.telegram.bot_token or "", settings.telegram.chat_id or "")
+        except TelegramApiError as error:
+            logging.error("Telegram validation failed: %s", error)
+            return 2
+        logging.info("Telegram validation succeeded for @%s; recipient access verified", username)
     storage = MonitorStorage(settings.storage.db_path)
     try:
         scanner = PlaywrightScanner(settings)
-        notifier = ConsoleNotifier()
+        console_notifier = ConsoleNotifier()
+        notifier = FanoutNotifier(
+            [
+                console_notifier,
+                TelegramNotifier(
+                    enabled=settings.telegram.enabled,
+                    bot_token=settings.telegram.bot_token,
+                    chat_id=settings.telegram.chat_id,
+                ),
+            ]
+        )
         if args.once:
             asyncio.run(run_once(settings, storage, scanner, notifier))
         else:
-            asyncio.run(_run_until_shutdown(settings, storage, scanner))
+            asyncio.run(_run_until_shutdown(settings, storage, scanner, notifier))
     except KeyboardInterrupt:
         logging.info("shutdown requested")
     except Exception:

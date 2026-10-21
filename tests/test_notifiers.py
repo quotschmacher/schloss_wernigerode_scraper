@@ -37,5 +37,5 @@ def test_console_reports_free_slots_on_every_successful_scan(capsys) -> None:
     assert "[FREI] 10.11.2026 11:30 – buchbar, exakte Platzzahl nicht ermittelbar" in output
 
 
-def test_telegram_notifier_is_an_explicit_noop() -> None:
-    assert TelegramNotifier(enabled=True).notify([make_change(5)]) is None
+def test_disabled_telegram_notifier_is_a_noop() -> None:
+    assert TelegramNotifier(enabled=False).notify([make_change(5)]) is None

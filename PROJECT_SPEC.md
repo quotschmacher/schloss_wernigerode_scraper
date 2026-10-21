@@ -198,12 +198,13 @@ Dies ist ein **Konfigurationsbeispiel**; Hermes muss eine vollständig lauffähi
 - `compose.yaml`: `monitor` (Standardservice mit `restart: unless-stopped`, Host-Bind-Mount `./data:/data` für SQLite, Environment-Overrides, `init: true`, stdout) sowie `dev` (Compose-Profil `dev`, Quellcode als Bind-Mount, interaktive Entwicklung, kein Endlosprozess). Nur `monitor` wird durch `docker compose up -d --build monitor` dauerhaft gestartet.
 - README beschreibt `docker compose --profile dev build dev`, `docker compose --profile dev run --rm dev pytest -q`, `docker compose --profile dev run --rm dev ruff check .`, `docker compose --profile dev run --rm dev python -m schloss_monitor --once`, `docker compose up -d --build monitor`, `docker compose logs -f monitor`, `docker compose down` sowie Intervall-Overrides über `.env`. **Keine Host-Python-Befehle als Setup-/Testschritte.**
 
-## 9. Telegram (noch ohne Versand)
+## 9. Telegram-Benachrichtigungen
 
-- Implementiere Notifier-Protokoll/Interface, z. B. `Notifier.notify(changes: list[Change])`.
-- `ConsoleNotifier` wird in v1 verwendet.
-- `TelegramNotifier` **nur vorbereitet**: Klasse/Stubs/Konfiguration und spätere Nachrichtenformatierung; keine API-Calls, keine Background-Queue, kein Versand, kein versehentlich aktivierter Test.
-- Künftige optionale Variablen: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` nur als Namen dokumentieren; keine Werte ins Repository und Telegram immer default OFF.
+- Bei `MONITOR_TELEGRAM_ENABLED=true` muss die Anwendung beim Start `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` verlangen und die Telegram-Bot-API-Endpunkte `getMe` sowie `getChat` aufrufen.
+- Erfolgreiche `getMe`-/`getChat`-Aufrufe bestätigen Token und Empfängerzugriff; Tokenwerte dürfen niemals geloggt werden.
+- Für Änderungen `NEW` und `INCREASED` mit einer verifizierten Restplatzanzahl sendet der Telegram-Notifier eine Nachricht an `TELEGRAM_CHAT_ID` mit Wochentag, Datum, Uhrzeit, Anzahl freier Plätze und Buchungs-URL. Die Chat-ID muss zu einem Benutzer, einer Gruppe oder einem Kanal gehören; die Bot-ID selbst ist kein gültiges Ziel.
+- Unbekannte Mengen, Verringerungen, Ausbuchungen und unveränderte Slots lösen keine Telegram-Nachricht aus.
+- Bei fehlendem oder ungültigem Token bzw. fehlender Chat-ID muss der Start mit einem klaren Fehler abbrechen.
 
 ## 10. Tests und Akzeptanzkriterien
 
@@ -223,10 +224,19 @@ Erstelle unabhängige Tests für mindestens:
 - [ ] Persistenz nach Neustart / idempotente SQLite-Migration.
 - [ ] Konfiguration aus TOML und Override mit Compose-Env.
 - [ ] `--once` beendet sich; Normalmodus wird durch SIGTERM sauber beendet.
-- [ ] Telegram wird in keinem Test/Produktionsfall real kontaktiert.
+- [ ] Telegram-`getMe`- und `sendMessage`-Aufrufe sind in automatisierten Tests gemockt; eine reale Nachricht darf nur bei aktiviertem Telegram in einem bewussten Live-Monitorlauf gesendet werden.
 - [ ] Docker-Images für Entwicklung und Produktion baubar; Devcontainer als Entwicklungsumgebung nutzbar; alle Tests/Lints im Container ausgeführt; keine `.venv` oder Host-Python-Installation.
 
 ### Live-Abnahme
+
+Vor jedem manuellen Monitor-/Live-Test muss der lokale SQLite-Zustand zurückgesetzt werden, damit der Durchlauf keine vorherigen Snapshots verwendet:
+
+```bash
+rm -f data/appointments.sqlite3 data/appointments.sqlite3-shm data/appointments.sqlite3-wal
+docker compose --profile dev run --rm dev python -m schloss_monitor --once
+```
+
+Dieser Reset lässt alle aktuell freien Slots beim folgenden erfolgreichen Durchlauf als `NEW` erscheinen. Bei aktivierter Telegram-Konfiguration kann er daher echte Benachrichtigungen auslösen und darf nur bewusst verwendet werden.
 
 Ein sorgfältig ausgeführter Live-Smoketest bestätigt den DOM-/Navigationsfluss mindestens bis zur Buchungsansicht eines tatsächlich buchbaren, aktuellen Slots. Falls es zum Testzeitpunkt keine buchbaren Plätze gibt, dokumentiere diese Grenze offen. Ein Programm, das zwar syntaktisch läuft, aber die echte Platzanzahl nicht nachweisbar ermitteln kann, darf **nicht** behaupten, exakte Mengen zu liefern.
 

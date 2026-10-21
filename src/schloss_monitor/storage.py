@@ -57,6 +57,16 @@ class MonitorStorage:
                 (now, now, "FAILED", error_message),
             )
 
+    def preview_successful_scan(
+        self, appointments: list[Appointment], protected_dates: set[str] | None = None
+    ) -> list[Change]:
+        current = {appointment.event_key: appointment for appointment in appointments}
+        previous = self.current_appointments()
+        for key, appointment in previous.items():
+            if appointment.start_at.date().isoformat() in (protected_dates or set()) and key not in current:
+                current[key] = appointment
+        return self._changes(previous, current)
+
     def commit_successful_scan(
         self, appointments: list[Appointment], protected_dates: set[str] | None = None
     ) -> list[Change]:

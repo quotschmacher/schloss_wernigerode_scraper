@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from schloss_monitor.config import load_settings
+from schloss_monitor.models import Appointment, AppointmentStatus, CountSource
 from schloss_monitor.monitor import (
     PlaywrightScanner,
+    ScanResult,
     retry_async,
     run_forever,
+    run_once,
     wait_for_page_ready,
 )
 from schloss_monitor.notifiers.console import ConsoleNotifier
+from schloss_monitor.notifiers.telegram import TelegramApiError
 from schloss_monitor.storage import MonitorStorage
 
 
@@ -75,3 +81,45 @@ class ReadyPage:
 @pytest.mark.asyncio
 async def test_wait_for_page_ready_waits_for_dom_content_loaded() -> None:
     await wait_for_page_ready(ReadyPage(), timeout_ms=123)
+
+
+class FailingNotifier:
+    def report_slots(self, appointments) -> None:
+        del appointments
+
+    def notify(self, changes) -> None:
+        del changes
+        raise TelegramApiError("chat not accessible")
+
+
+class StaticScanner:
+    def __init__(self, appointment: Appointment) -> None:
+        self.appointment = appointment
+
+    async def scan(self) -> ScanResult:
+        return ScanResult([self.appointment], set(), 1)
+
+
+@pytest.mark.asyncio
+async def test_notification_failure_does_not_commit_new_snapshot(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = load_settings(config)
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+    appointment = Appointment(
+        event_key="magische-tiere-2026-11-10-1130",
+        start_at=datetime(2026, 11, 10, 11, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+        status=AppointmentStatus.AVAILABLE,
+        available_places=5,
+        detail_url="https://example.test/detail",
+        booking_url="https://example.test/booking",
+        observed_at=datetime.now(ZoneInfo("UTC")),
+        count_source=CountSource.TICKETFRITZ_EXACT,
+    )
+
+    with pytest.raises(TelegramApiError, match="chat not accessible"):
+        await run_once(settings, storage, StaticScanner(appointment), FailingNotifier())
+
+    assert storage.current_appointments() == {}
+    storage.close()
+

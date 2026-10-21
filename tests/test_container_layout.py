@@ -7,7 +7,7 @@ def test_production_image_copies_runtime_configuration() -> None:
     assert "COPY pyproject.toml README.md config.toml ./" in dockerfile
 
 
-def test_monitor_service_binds_sqlite_data_to_project_directory() -> None:
+def test_monitor_and_dev_share_the_host_sqlite_directory() -> None:
     compose = Path("compose.yaml").read_text(encoding="utf-8")
 
-    assert "- ./data:/data" in compose
+    assert compose.count("- ./data:/data") == 2

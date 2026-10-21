@@ -40,6 +40,8 @@ class LoggingSettings:
 @dataclass(frozen=True)
 class TelegramSettings:
     enabled: bool
+    bot_token: str | None
+    chat_id: str | None
 
 
 @dataclass(frozen=True)
@@ -122,6 +124,17 @@ def load_settings(config_file: Path) -> Settings:
     if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ConfigError("logging.level must be a valid log level")
 
+    telegram_enabled = _as_bool(
+        _value(telegram, "enabled", "MONITOR_TELEGRAM_ENABLED"),
+        "telegram.enabled",
+    )
+    telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN") or None
+    telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID") or None
+    if telegram_enabled and not telegram_bot_token:
+        raise ConfigError("TELEGRAM_BOT_TOKEN is required when Telegram is enabled")
+    if telegram_enabled and not telegram_chat_id:
+        raise ConfigError("TELEGRAM_CHAT_ID is required when Telegram is enabled")
+
     return Settings(
         monitor=MonitorSettings(
             interval_seconds=_as_int(
@@ -152,9 +165,8 @@ def load_settings(config_file: Path) -> Settings:
         ),
         logging=LoggingSettings(level=log_level),
         telegram=TelegramSettings(
-            enabled=_as_bool(
-                _value(telegram, "enabled", "MONITOR_TELEGRAM_ENABLED"),
-                "telegram.enabled",
-            ),
+            enabled=telegram_enabled,
+            bot_token=telegram_bot_token,
+            chat_id=telegram_chat_id,
         ),
     )

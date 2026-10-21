@@ -1,6 +1,6 @@
 # Schloss Wernigerode Terminmonitor
 
-Read-only Playwright monitor for the public appointments of “Die Schule der magischen Tiere – Besichtigung Drehorte”. Every successful scan prints the current free slots to the console, even when the SQLite snapshot has not changed. Change events remain available primarily for a future Telegram notifier. Telegram is architecturally prepared but is an enforced no-op: this version never sends a Telegram request.
+Read-only Playwright monitor for the public appointments of “Die Schule der magischen Tiere – Besichtigung Drehorte”. Every successful scan prints the current free slots to the console, even when the SQLite snapshot has not changed. Change events remain available primarily for Telegram alerts. When enabled, startup validates `TELEGRAM_BOT_TOKEN` with Telegram's read-only `getMe` endpoint; newly available or increased verified capacity is sent to `TELEGRAM_CHAT_ID`.
 
 ## Welche Datei verwendet Hermes?
 
@@ -42,7 +42,11 @@ docker compose --profile dev run --rm dev pytest -q
 # Lint ausschließlich im Entwicklungscontainer
 docker compose --profile dev run --rm dev ruff check .
 
-# Einmaliger Live-Scan im Entwicklungscontainer
+# Reset the local SQLite state before a manual live-monitor test.
+# Warning: with Telegram enabled, the next scan treats currently free slots as NEW and can send alerts.
+rm -f data/appointments.sqlite3 data/appointments.sqlite3-shm data/appointments.sqlite3-wal
+
+# Perform one live scan in a fresh state
 docker compose --profile dev run --rm dev python -m schloss_monitor --once
 
 # Dauerbetrieb in der Produktion starten
@@ -61,7 +65,7 @@ Alternativ in VS Code **„Reopen in Container“** öffnen. Dort darfst du `pyt
 
 The project is implemented. `dev` is the Compose-profiled development/test service. `monitor` persists SQLite at `./data/appointments.sqlite3` through the project-relative host bind mount `./data:/data`; it exposes no ports. The Compose service runs as root so the bind mount remains writable on Docker Desktop for Windows.
 
-Configuration lives in `config.toml`; the supported environment overrides are `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, and `MONITOR_CONFIG_FILE`. Copy `.env.example` to `.env` for Compose interpolation. The default scan interval is 3600 seconds.
+Configuration lives in `config.toml`; the supported environment overrides are `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `MONITOR_CONFIG_FILE`. When Telegram is enabled, startup calls `getMe` and `getChat` to validate the bot token and recipient access. `TELEGRAM_CHAT_ID` must identify a user, group, or channel—not the bot itself. It sends messages only for `NEW` and `INCREASED` changes with an exact free-place count; each message contains weekday, date, time, count, and booking URL. Copy `.env.example` to `.env` for Compose interpolation. The default scan interval is 3600 seconds.
 
 Availability is exact only when Ticketfritz's observed read-only `getEvents` response supplies `AnzahlFrei` or `MengeAktuellVerfuegbar` for the matching time. Capacity, cart limits, and price maxima are never treated as availability. When no exact field is available, the monitor records and prints an explicitly unknown count. No reservation, cart, checkout, login, or payment interaction is implemented.
 
