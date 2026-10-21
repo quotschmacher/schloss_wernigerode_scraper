@@ -10,6 +10,4 @@ def test_ghcr_workflow_publishes_latest_and_commit_sha_from_main() -> None:
     assert "target: production" in workflow
     assert "${{ github.sha }}" in workflow
     assert ":latest" in workflow
-    assert "Set package visibility to public" in workflow
-    assert "visibility\":\"public" in workflow
-    assert "/users/${{ github.repository_owner }}/packages/container/" in workflow
+    assert "Set package visibility to public" not in workflow
