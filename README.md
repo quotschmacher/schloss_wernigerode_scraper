@@ -63,9 +63,40 @@ Alternativ in VS Code **„Reopen in Container“** öffnen. Dort darfst du `pyt
 
 **Kein venv erstellen.** Entwicklungspakete gehören in den Build-Schritt des Entwicklungs-Docker-Images. Der Devcontainer nutzt den Compose-Service `dev` und startet beim Öffnen keinen Monitor.
 
+## Deployment mit dem GHCR-Image
+
+Für einen Server ohne lokales Repository kann diese Datei als `docker-compose.yaml` abgelegt werden. Sie zieht das veröffentlichte Produktionsimage aus der GitHub Container Registry, liest die Variablen aus `.env` und persistiert SQLite relativ zur Compose-Datei unter `./data`.
+
+```yaml
+services:
+  monitor:
+    image: ghcr.io/quotschmacher/schloss_wernigerode_scraper:latest
+    init: true
+    restart: unless-stopped
+    # Required for a writable Windows/Docker-Desktop bind mount.
+    user: "0:0"
+    env_file:
+      - .env
+    environment:
+      MONITOR_DB_PATH: /data/appointments.sqlite3
+    volumes:
+      - ./data:/data
+```
+
+`latest` refers to the newest successful `main` build. Each image is also published under its full Git commit hash, for example `ghcr.io/quotschmacher/schloss_wernigerode_scraper:<commit-sha>`, for reproducible deployments.
+
+Die Sichtbarkeit eines GHCR-Pakets wird einmalig in GitHub gesetzt: Repository → **Packages** → `schloss_wernigerode_scraper` → **Package settings** → **Change visibility** → **Public**. Der Workflow kann anschließend ohne Zugangsdaten aus der Registry gezogen werden. Solange das Paket privat ist, zuerst mit einem GitHub-Token mit `read:packages` anmelden:
+
+```bash
+docker login ghcr.io
+mkdir -p data
+docker compose up -d
+docker compose logs -f monitor
+```
+
 The project is implemented. `dev` is the Compose-profiled development/test service. `monitor` persists SQLite at `./data/appointments.sqlite3` through the project-relative host bind mount `./data:/data`; it exposes no ports. The Compose service runs as root so the bind mount remains writable on Docker Desktop for Windows.
 
-Configuration lives in `config.toml`; the supported environment overrides are `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `MONITOR_CONFIG_FILE`. When Telegram is enabled, startup calls `getMe` and `getChat` to validate the bot token and recipient access. `TELEGRAM_CHAT_ID` must identify a user, group, or channel—not the bot itself. It sends messages only for `NEW` and `INCREASED` changes with an exact free-place count; each message contains weekday, date, time, count, and booking URL. Copy `.env.example` to `.env` for Compose interpolation. The default scan interval is 3600 seconds.
+Configuration lives in `config.toml`; the supported environment overrides are `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `MONITOR_CONFIG_FILE`. When Telegram is enabled, startup calls `getMe` and `getChat` to validate the bot token and recipient access. `TELEGRAM_CHAT_ID` must identify a user, group, or channel—not the bot itself. For each successful scraping run, `NEW` and `INCREASED` changes with exact free-place counts are bundled into one structured Telegram message containing weekday, date, time, count, and booking URL. Copy `.env.example` to `.env` for Compose interpolation. The default scan interval is 3600 seconds.
 
 Availability is exact only when Ticketfritz's observed read-only `getEvents` response supplies `AnzahlFrei` or `MengeAktuellVerfuegbar` for the matching time. Capacity, cart limits, and price maxima are never treated as availability. When no exact field is available, the monitor records and prints an explicitly unknown count. No reservation, cart, checkout, login, or payment interaction is implemented.
 

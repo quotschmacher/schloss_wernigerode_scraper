@@ -16,14 +16,14 @@ from schloss_monitor.notifiers.telegram import (
 )
 
 
-def appointment(free_places: int | None) -> Appointment:
+def appointment(free_places: int | None, hour: int = 11) -> Appointment:
     return Appointment(
-        event_key="magische-tiere-2026-11-10-1130",
-        start_at=datetime(2026, 11, 10, 11, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+        event_key=f"magische-tiere-2026-11-10-{hour:02d}30",
+        start_at=datetime(2026, 11, 10, hour, 30, tzinfo=ZoneInfo("Europe/Berlin")),
         status=AppointmentStatus.AVAILABLE,
         available_places=free_places,
         detail_url="https://example.test/detail",
-        booking_url="https://example.test/booking",
+        booking_url=f"https://example.test/booking/{hour:02d}30",
         observed_at=datetime.now(ZoneInfo("UTC")),
         count_source=CountSource.TICKETFRITZ_EXACT,
     )
@@ -60,7 +60,7 @@ def test_get_chat_validates_configured_recipient_without_sending_message() -> No
     assert requested == ["https://api.telegram.org/bottest-token/getChat?chat_id=123456"]
 
 
-def test_telegram_notifier_sends_only_new_or_increased_known_availability() -> None:
+def test_telegram_notifier_batches_alertable_changes_into_one_structured_message() -> None:
     sent: list[tuple[str, bytes]] = []
 
     def post_transport(url: str, body: bytes) -> bytes:
@@ -76,20 +76,19 @@ def test_telegram_notifier_sends_only_new_or_increased_known_availability() -> N
     notifier.notify(
         [
             Change(ChangeType.NEW, appointment(5)),
-            Change(ChangeType.INCREASED, appointment(7), previous_available_places=3),
+            Change(ChangeType.INCREASED, appointment(7, hour=14), previous_available_places=3),
             Change(ChangeType.DECREASED, appointment(2), previous_available_places=7),
             Change(ChangeType.NEW, appointment(None)),
         ]
     )
 
-    assert [url for url, _ in sent] == [
-        "https://api.telegram.org/bottest-token/sendMessage",
-        "https://api.telegram.org/bottest-token/sendMessage",
-    ]
-    first_message = parse_qs(sent[0][1].decode())["text"][0]
-    assert "Dienstag, 10.11.2026, 11:30" in first_message
-    assert "5 freie Plätze" in first_message
-    assert "https://example.test/booking" in first_message
+    assert [url for url, _ in sent] == ["https://api.telegram.org/bottest-token/sendMessage"]
+    message = parse_qs(sent[0][1].decode())["text"][0]
+    assert "Neue freie Plätze" in message
+    assert "[NEU] Dienstag, 10.11.2026, 11:30 – 5 freie Plätze" in message
+    assert "[MEHR] Dienstag, 10.11.2026, 14:30 – 7 freie Plätze" in message
+    assert "https://example.test/booking/1130" in message
+    assert "https://example.test/booking/1430" in message
 
 
 def test_disabled_telegram_notifier_does_not_send() -> None:

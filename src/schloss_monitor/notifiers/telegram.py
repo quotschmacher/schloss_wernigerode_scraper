@@ -91,29 +91,31 @@ class TelegramNotifier:
             return
         if not self.bot_token or not self.chat_id:
             raise TelegramApiError("Telegram notifier requires bot token and chat ID")
-        for change in changes:
-            if change.kind not in {ChangeType.NEW, ChangeType.INCREASED}:
-                continue
-            appointment = change.appointment
-            if appointment.available_places is None or appointment.status is not AppointmentStatus.AVAILABLE:
-                continue
-            self._send_availability(appointment)
+        alerts = [
+            change
+            for change in changes
+            if change.kind in {ChangeType.NEW, ChangeType.INCREASED}
+            and change.appointment.available_places is not None
+            and change.appointment.status is AppointmentStatus.AVAILABLE
+        ]
+        if alerts:
+            self._send_batch(alerts)
 
-    def _send_availability(self, appointment: Appointment) -> None:
+    def _send_batch(self, changes: Sequence[Change]) -> None:
         assert self.bot_token is not None
         assert self.chat_id is not None
         url = f"https://api.telegram.org/bot{quote(self.bot_token, safe='')}/sendMessage"
         body = urlencode(
             {
                 "chat_id": self.chat_id,
-                "text": self._message_text(appointment),
+                "text": self._message_text(changes),
                 "disable_web_page_preview": "true",
             }
         ).encode()
         _telegram_response(self.post_transport(url, body), "sendMessage")
 
     @staticmethod
-    def _message_text(appointment: Appointment) -> str:
+    def _message_text(changes: Sequence[Change]) -> str:
         weekdays = (
             "Montag",
             "Dienstag",
@@ -123,11 +125,18 @@ class TelegramNotifier:
             "Samstag",
             "Sonntag",
         )
-        weekday = weekdays[appointment.start_at.weekday()]
-        when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
-        return (
-            f"Freie Plätze: {weekday}, {when}\n"
-            f"{appointment.available_places} freie Plätze\n"
-            f"{appointment.booking_url}"
-        )
+        lines = ["Neue freie Plätze:", ""]
+        for change in sorted(changes, key=lambda item: item.appointment.start_at):
+            appointment = change.appointment
+            weekday = weekdays[appointment.start_at.weekday()]
+            when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
+            label = "NEU" if change.kind is ChangeType.NEW else "MEHR"
+            lines.extend(
+                [
+                    f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze",
+                    appointment.booking_url,
+                    "",
+                ]
+            )
+        return "\n".join(lines).rstrip()
 

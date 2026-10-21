@@ -202,7 +202,7 @@ Dies ist ein **Konfigurationsbeispiel**; Hermes muss eine vollständig lauffähi
 
 - Bei `MONITOR_TELEGRAM_ENABLED=true` muss die Anwendung beim Start `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` verlangen und die Telegram-Bot-API-Endpunkte `getMe` sowie `getChat` aufrufen.
 - Erfolgreiche `getMe`-/`getChat`-Aufrufe bestätigen Token und Empfängerzugriff; Tokenwerte dürfen niemals geloggt werden.
-- Für Änderungen `NEW` und `INCREASED` mit einer verifizierten Restplatzanzahl sendet der Telegram-Notifier eine Nachricht an `TELEGRAM_CHAT_ID` mit Wochentag, Datum, Uhrzeit, Anzahl freier Plätze und Buchungs-URL. Die Chat-ID muss zu einem Benutzer, einer Gruppe oder einem Kanal gehören; die Bot-ID selbst ist kein gültiges Ziel.
+- Für Änderungen `NEW` und `INCREASED` mit einer verifizierten Restplatzanzahl bündelt der Telegram-Notifier alle Alert-Ereignisse eines erfolgreichen Scraping-Durchlaufs in **eine** strukturierte Nachricht an `TELEGRAM_CHAT_ID`. Jeder Eintrag enthält Wochentag, Datum, Uhrzeit, Anzahl freier Plätze und Buchungs-URL. Die Chat-ID muss zu einem Benutzer, einer Gruppe oder einem Kanal gehören; die Bot-ID selbst ist kein gültiges Ziel.
 - Unbekannte Mengen, Verringerungen, Ausbuchungen und unveränderte Slots lösen keine Telegram-Nachricht aus.
 - Bei fehlendem oder ungültigem Token bzw. fehlender Chat-ID muss der Start mit einem klaren Fehler abbrechen.
 
