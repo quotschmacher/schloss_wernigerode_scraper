@@ -51,6 +51,7 @@ Keinesfalls 11:30 und 14:00 unter einem einzigen Datensatz zusammenfassen.
 - **Eindeutige Terminidentität:** Kombination aus normiertem Veranstaltungskennzeichen (`magische-tiere`), lokalem Kalendertag und Uhrzeit `HH:MM`. Falls offizielle eindeutige Event-IDs vorhanden sind, zusätzlich speichern; volatile Buchungslinks nicht als alleinigen Primärschlüssel verwenden.
 - **Status:** `AVAILABLE`, `SOLD_OUT`, `UNKNOWN`, optional `NO_LONGER_LISTED`/`SKIPPED` als klar getrennte Beobachtungszustände. **Zahl unbekannt** (`NULL`) ist nicht gleich **null freie Plätze** (`0`).
 - **Zeit:** `start_at` in lokaler Zone `Europe/Berlin`; `first_seen_at`, `last_seen_at`, `last_changed_at` in UTC.
+- **Kalendermarkierungen:** Termine an Samstag/Sonntag tragen `WOCHENENDE`. Zusätzlich werden sie mit den Schulferien des konfigurierten Bundeslands abgeglichen und ggf. mit `SCHULFERIEN: <Ferienart>` markiert.
 - **Quellen:** Detail- und Buchungslink; dokumentierte Quelle der verfügbaren Menge (falls vorhanden).
 
 ### Ausgabe bei jedem erfolgreichen Scan
@@ -154,11 +155,14 @@ db_path = "data/appointments.sqlite3"
 [logging]
 level = "INFO"
 
+[holidays]
+federal_state = "sachsen-anhalt"
+
 [telegram]
 enabled = false
 ```
 
-Vorgesehene Overrides: `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_TELEGRAM_ENABLED`, ggf. `MONITOR_CONFIG_FILE`.
+Vorgesehene Overrides: `MONITOR_INTERVAL_SECONDS`, `MONITOR_DB_PATH`, `MONITOR_HEADLESS`, `MONITOR_LOG_LEVEL`, `MONITOR_REQUEST_DELAY_SECONDS`, `MONITOR_FEDERAL_STATE`, `MONITOR_TELEGRAM_ENABLED`, ggf. `MONITOR_CONFIG_FILE`.
 
 Validieren: Pause > 0, max clicks > 0, URLs erlaubtes Schema, Pfad beschreibbar, boolesche Umgebungsvariablen robust interpretieren. Vermeide hartkodierte Pause. Durch Compose setzen können, z. B.:
 

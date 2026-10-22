@@ -44,6 +44,7 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("MONITOR_HEADLESS", "false")
     monkeypatch.setenv("MONITOR_LOG_LEVEL", "debug")
     monkeypatch.setenv("MONITOR_REQUEST_DELAY_SECONDS", "2.25")
+    monkeypatch.setenv("MONITOR_FEDERAL_STATE", "berlin")
     monkeypatch.setenv("MONITOR_TELEGRAM_ENABLED", "true")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
@@ -55,6 +56,7 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     assert settings.scraper.headless is False
     assert settings.logging.level == "DEBUG"
     assert settings.scraper.request_delay_seconds == 2.25
+    assert settings.holidays.federal_state == "berlin"
     assert settings.telegram.enabled is True
     assert settings.telegram.bot_token == "test-token"
     assert settings.telegram.chat_id == "123456"

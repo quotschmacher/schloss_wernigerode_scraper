@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -17,6 +17,7 @@ from .config import Settings
 from .detail_scraper import parse_detail_slots
 from .models import Appointment, AppointmentStatus
 from .notifiers.base import Notifier
+from .school_holidays import SchoolHolidayError, SchoolHolidayProvider, SlotAnnotation
 from .storage import MonitorStorage
 
 LOG = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class ScanResult:
     appointments: list[Appointment]
     protected_dates: set[str]
     calendar_days: int
+    annotations: dict[str, SlotAnnotation] = field(default_factory=dict)
 
 
 class PlaywrightScanner:
@@ -100,10 +102,27 @@ class PlaywrightScanner:
                             )
                         )
                         await asyncio.sleep(self.settings.scraper.request_delay_seconds)
-                return ScanResult(appointments, protected_dates, len(entries))
+                annotations = await self._annotations(appointments)
+                return ScanResult(appointments, protected_dates, len(entries), annotations)
             finally:
                 await context.close()
                 await browser.close()
+
+    async def _annotations(self, appointments: list[Appointment]) -> dict[str, SlotAnnotation]:
+        dates = [appointment.start_at.date() for appointment in appointments]
+        fallback = {date_value: SlotAnnotation(date_value.weekday() >= 5, ()) for date_value in set(dates)}
+        if not dates:
+            return {}
+        provider = SchoolHolidayProvider(self.settings.holidays.federal_state)
+        try:
+            by_date = await asyncio.to_thread(provider.annotations_for, dates)
+        except SchoolHolidayError as error:
+            LOG.warning("school holiday lookup failed state=%s reason=%s", self.settings.holidays.federal_state, error)
+            by_date = fallback
+        return {
+            appointment.event_key: by_date.get(appointment.start_at.date(), fallback[appointment.start_at.date()])
+            for appointment in appointments
+        }
 
     async def _booking_availability(self, page: Page, booking_url: str, start_at: datetime):
         await retry_async(
@@ -176,9 +195,9 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
     except Exception as error:
         storage.record_failed_scan(str(error))
         raise
-    notifier.report_slots(result.appointments)
+    notifier.report_slots(result.appointments, result.annotations)
     changes = storage.preview_successful_scan(result.appointments, result.protected_dates)
-    notifier.notify(changes)
+    notifier.notify(changes, result.annotations)
     storage.commit_successful_scan(result.appointments, result.protected_dates)
     LOG.info(
         "scan finished days=%s slots=%s changes=%s",

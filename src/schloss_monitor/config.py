@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,11 @@ class LoggingSettings:
 
 
 @dataclass(frozen=True)
+class HolidaySettings:
+    federal_state: str
+
+
+@dataclass(frozen=True)
 class TelegramSettings:
     enabled: bool
     bot_token: str | None
@@ -50,6 +56,7 @@ class Settings:
     scraper: ScraperSettings
     storage: StorageSettings
     logging: LoggingSettings
+    holidays: HolidaySettings
     telegram: TelegramSettings
 
 
@@ -113,6 +120,9 @@ def load_settings(config_file: Path) -> Settings:
     scraper = _section(raw, "scraper")
     storage = _section(raw, "storage")
     logging = _section(raw, "logging")
+    holidays = raw.get("holidays", {})
+    if not isinstance(holidays, dict):
+        raise ConfigError("[holidays] must be a TOML table")
     telegram = _section(raw, "telegram")
 
     url = str(_value(scraper, "url"))
@@ -123,6 +133,11 @@ def load_settings(config_file: Path) -> Settings:
     log_level = str(_value(logging, "level", "MONITOR_LOG_LEVEL")).upper()
     if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ConfigError("logging.level must be a valid log level")
+
+    federal_state = str(os.environ.get("MONITOR_FEDERAL_STATE") or holidays.get("federal_state", "sachsen-anhalt"))
+    federal_state = federal_state.strip().lower()
+    if not re.fullmatch(r"[a-z]+(?:-[a-z]+)*", federal_state):
+        raise ConfigError("holidays.federal_state must be a lowercase URL slug")
 
     telegram_enabled = _as_bool(
         _value(telegram, "enabled", "MONITOR_TELEGRAM_ENABLED"),
@@ -164,6 +179,7 @@ def load_settings(config_file: Path) -> Settings:
             db_path=Path(str(_value(storage, "db_path", "MONITOR_DB_PATH"))),
         ),
         logging=LoggingSettings(level=log_level),
+        holidays=HolidaySettings(federal_state=federal_state),
         telegram=TelegramSettings(
             enabled=telegram_enabled,
             bot_token=telegram_bot_token,

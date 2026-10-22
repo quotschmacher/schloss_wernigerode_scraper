@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from ..models import Appointment, AppointmentStatus, Change, ChangeType
+from ..school_holidays import SlotAnnotation
 
 type Transport = Callable[[str], bytes]
 type PostTransport = Callable[[str, bytes], bytes]
@@ -82,11 +83,15 @@ class TelegramNotifier:
     chat_id: str | None = None
     post_transport: PostTransport = _default_post_transport
 
-    def report_slots(self, appointments: Sequence[Appointment]) -> None:
-        del appointments
+    def report_slots(
+        self, appointments: Sequence[Appointment], annotations: Mapping[str, SlotAnnotation] | None = None
+    ) -> None:
+        del appointments, annotations
         return None
 
-    def notify(self, changes: Sequence[Change]) -> None:
+    def notify(
+        self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None
+    ) -> None:
         if not self.enabled:
             return
         if not self.bot_token or not self.chat_id:
@@ -99,23 +104,25 @@ class TelegramNotifier:
             and change.appointment.status is AppointmentStatus.AVAILABLE
         ]
         if alerts:
-            self._send_batch(alerts)
+            self._send_batch(alerts, annotations or {})
 
-    def _send_batch(self, changes: Sequence[Change]) -> None:
+    def _send_batch(self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation]) -> None:
         assert self.bot_token is not None
         assert self.chat_id is not None
         url = f"https://api.telegram.org/bot{quote(self.bot_token, safe='')}/sendMessage"
         body = urlencode(
             {
                 "chat_id": self.chat_id,
-                "text": self._message_text(changes),
+                "text": self._message_text(changes, annotations),
                 "disable_web_page_preview": "true",
             }
         ).encode()
         _telegram_response(self.post_transport(url, body), "sendMessage")
 
     @staticmethod
-    def _message_text(changes: Sequence[Change]) -> str:
+    def _message_text(
+        changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation]
+    ) -> str:
         weekdays = (
             "Montag",
             "Dienstag",
@@ -131,9 +138,11 @@ class TelegramNotifier:
             weekday = weekdays[appointment.start_at.weekday()]
             when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
             label = "NEU" if change.kind is ChangeType.NEW else "MEHR"
+            annotation = annotations.get(appointment.event_key)
+            markers = f" [{' | '.join(annotation.labels)}]" if annotation and annotation.labels else ""
             lines.extend(
                 [
-                    f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze",
+                    f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze{markers}",
                     appointment.booking_url,
                     "",
                 ]

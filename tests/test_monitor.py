@@ -84,11 +84,11 @@ async def test_wait_for_page_ready_waits_for_dom_content_loaded() -> None:
 
 
 class FailingNotifier:
-    def report_slots(self, appointments) -> None:
-        del appointments
+    def report_slots(self, appointments, annotations=None) -> None:
+        del appointments, annotations
 
-    def notify(self, changes) -> None:
-        del changes
+    def notify(self, changes, annotations=None) -> None:
+        del changes, annotations
         raise TelegramApiError("chat not accessible")
 
 

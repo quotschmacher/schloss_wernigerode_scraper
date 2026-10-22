@@ -10,12 +10,14 @@ class RecordingNotifier:
         self.slot_calls = 0
         self.change_calls = 0
 
-    def report_slots(self, appointments) -> None:
+    def report_slots(self, appointments, annotations=None) -> None:
         assert appointments
+        del annotations
         self.slot_calls += 1
 
-    def notify(self, changes) -> None:
+    def notify(self, changes, annotations=None) -> None:
         assert changes
+        del annotations
         self.change_calls += 1
 
 

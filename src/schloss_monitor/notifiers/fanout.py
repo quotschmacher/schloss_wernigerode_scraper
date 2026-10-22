@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ..models import Appointment, Change
+from ..school_holidays import SlotAnnotation
 from .base import Notifier
 
 
@@ -11,10 +12,14 @@ from .base import Notifier
 class FanoutNotifier:
     notifiers: Sequence[Notifier]
 
-    def report_slots(self, appointments: Sequence[Appointment]) -> None:
+    def report_slots(
+        self, appointments: Sequence[Appointment], annotations: Mapping[str, SlotAnnotation] | None = None
+    ) -> None:
         for notifier in self.notifiers:
-            notifier.report_slots(appointments)
+            notifier.report_slots(appointments, annotations)
 
-    def notify(self, changes: Sequence[Change]) -> None:
+    def notify(
+        self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None
+    ) -> None:
         for notifier in self.notifiers:
-            notifier.notify(changes)
+            notifier.notify(changes, annotations)

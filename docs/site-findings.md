@@ -1,6 +1,6 @@
 # Site findings
 
-Live inspection: 19 October 2026 (read-only browser session)
+Live inspection: 19 October 2026 (Schloss/Ticketfritz) and 22 October 2026 (school-holiday source), read-only browser sessions
 
 ## Scope and safety
 
@@ -79,6 +79,18 @@ The observed response was JSON served with `text/html; charset=utf-8`. For the o
 `AnzahlFrei` and `MengeAktuellVerfuegbar` are the only observed fields treated as an exact remaining-count candidate. The implementation requires a non-negative integer field and matches it to the requested date/time before recording it. It never uses `AnzahlKapazitaet`, `CapacityTotal`, `MaxWarenkorbMenge`, or price-level `MaxMenge` as a fallback count: those fields can represent capacity or a purchase limit rather than availability.
 
 At the time of inspection all three relevant values happened to be 18, so the visual table alone could not prove that it was not showing capacity. The monitored program therefore records an exact count only from the explicitly named availability fields in the public response, otherwise it records `available_places = null` with source `unknown`.
+
+## School-holiday source
+
+Inspected source:
+
+```text
+https://www.schulferien.org/deutschland/ferien/sachsen-anhalt/
+```
+
+On 22 October 2026 the page title was `Schulferien Sachsen-Anhalt 2026, 2027`. Its annual table is `table.sf_table.sf_table_responsive_block`; its header cells are an empty year column followed by `Winter`, `Ostern`, `Pfingsten`, `Sommer`, `Herbst`, and `Weihnachten`. Each body row begins with a four-digit year and contains German date ranges. The observed 2025 Christmas entry crossed a calendar-year boundary (`22.12.2025 - 05.01.2026`).
+
+The implementation reads this public annual table once after a complete appointment scan, parses single-day and date-range entries (including cross-year ranges), and compares appointment dates to the parsed periods. It does not scrape the graphical month views. `MONITOR_FEDERAL_STATE` supplies the lower-case URL slug and defaults to `sachsen-anhalt`. A failed school-holiday lookup does not invalidate a successful appointment scan: weekend labels remain available and the lookup failure is logged.
 
 ## Live-flow limits
 

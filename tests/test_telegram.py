@@ -14,6 +14,7 @@ from schloss_monitor.notifiers.telegram import (
     verify_bot_token,
     verify_chat_access,
 )
+from schloss_monitor.school_holidays import SlotAnnotation
 
 
 def appointment(free_places: int | None, hour: int = 11) -> Appointment:
@@ -73,19 +74,22 @@ def test_telegram_notifier_batches_alertable_changes_into_one_structured_message
         chat_id="123456",
         post_transport=post_transport,
     )
+    annotated = appointment(5)
     notifier.notify(
         [
-            Change(ChangeType.NEW, appointment(5)),
+            Change(ChangeType.NEW, annotated),
             Change(ChangeType.INCREASED, appointment(7, hour=14), previous_available_places=3),
             Change(ChangeType.DECREASED, appointment(2), previous_available_places=7),
             Change(ChangeType.NEW, appointment(None)),
-        ]
+        ],
+        {annotated.event_key: SlotAnnotation(True, ("Herbstferien",))},
     )
 
     assert [url for url, _ in sent] == ["https://api.telegram.org/bottest-token/sendMessage"]
     message = parse_qs(sent[0][1].decode())["text"][0]
     assert "Neue freie Plätze" in message
     assert "[NEU] Dienstag, 10.11.2026, 11:30 – 5 freie Plätze" in message
+    assert "[WOCHENENDE | SCHULFERIEN: Herbstferien]" in message
     assert "[MEHR] Dienstag, 10.11.2026, 14:30 – 7 freie Plätze" in message
     assert "https://example.test/booking/1130" in message
     assert "https://example.test/booking/1430" in message

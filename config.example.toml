@@ -17,5 +17,9 @@ db_path = "data/appointments.sqlite3"
 [logging]
 level = "INFO"
 
+[holidays]
+# URL slug from schulferien.org; can be overridden by MONITOR_FEDERAL_STATE.
+federal_state = "sachsen-anhalt"
+
 [telegram]
 enabled = false
