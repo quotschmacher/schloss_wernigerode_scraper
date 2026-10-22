@@ -11,3 +11,7 @@ def test_ghcr_workflow_publishes_latest_and_commit_sha_from_main() -> None:
     assert "${{ github.sha }}" in workflow
     assert ":latest" in workflow
     assert "Set package visibility to public" not in workflow
+    assert "actions/checkout@v6" in workflow
+    assert "docker/setup-buildx-action@v4" in workflow
+    assert "docker/login-action@v4" in workflow
+    assert "docker/build-push-action@v7" in workflow
