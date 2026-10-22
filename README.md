@@ -85,6 +85,8 @@ services:
 
 `latest` refers to the newest successful `main` build. Each image is also published under its full Git commit hash, for example `ghcr.io/quotschmacher/schloss_wernigerode_scraper:<commit-sha>`, for reproducible deployments.
 
+Wichtig: Immer das Verzeichnis `./data:/data` mounten, niemals die einzelne Datei `appointments.sqlite3`. Die Anwendung erzeugt eine fehlende Datenbankdatei automatisch, sofern das gemountete Verzeichnis existiert und beschreibbar ist.
+
 Die Sichtbarkeit eines GHCR-Pakets wird einmalig in GitHub gesetzt: Repository → **Packages** → `schloss_wernigerode_scraper` → **Package settings** → **Change visibility** → **Public**. Der Workflow kann anschließend ohne Zugangsdaten aus der Registry gezogen werden. Solange das Paket privat ist, zuerst mit einem GitHub-Token mit `read:packages` anmelden:
 
 ```bash

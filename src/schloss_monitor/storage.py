@@ -7,10 +7,23 @@ from pathlib import Path
 from .models import Appointment, AppointmentStatus, Change, ChangeType, CountSource
 
 
+class StorageError(RuntimeError):
+    """The SQLite database path is unavailable or unusable."""
+
+
 class MonitorStorage:
     def __init__(self, db_path: Path) -> None:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(db_path)
+        if db_path.exists() and db_path.is_dir():
+            raise StorageError(
+                f"SQLite path {db_path} is a directory. Mount the containing directory, not the database file."
+            )
+        try:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.connection = sqlite3.connect(db_path)
+        except (OSError, sqlite3.Error) as error:
+            raise StorageError(
+                f"Cannot open SQLite database {db_path}. Ensure its parent directory is writable."
+            ) from error
         self.connection.row_factory = sqlite3.Row
         self._migrate()
 

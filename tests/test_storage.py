@@ -4,8 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from schloss_monitor.models import Appointment, AppointmentStatus, ChangeType, CountSource
-from schloss_monitor.storage import MonitorStorage
+from schloss_monitor.storage import MonitorStorage, StorageError
 
 UTC = ZoneInfo("UTC")
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -22,6 +24,14 @@ def appointment(key: str, count: int | None, status: AppointmentStatus = Appoint
         observed_at=datetime(2026, 10, 19, 20, 0, tzinfo=UTC),
         count_source=CountSource.TICKETFRITZ_EXACT if count is not None else CountSource.UNKNOWN,
     )
+
+
+def test_storage_rejects_a_database_path_mounted_as_a_directory(tmp_path: Path) -> None:
+    database = tmp_path / "appointments.sqlite3"
+    database.mkdir()
+
+    with pytest.raises(StorageError, match="Mount the containing directory"):
+        MonitorStorage(database)
 
 
 def test_storage_persists_only_successful_scans_and_emits_deltas(tmp_path: Path) -> None:

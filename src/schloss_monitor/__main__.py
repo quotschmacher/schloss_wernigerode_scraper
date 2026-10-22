@@ -17,7 +17,7 @@ from .notifiers.telegram import (
     verify_bot_token,
     verify_chat_access,
 )
-from .storage import MonitorStorage
+from .storage import MonitorStorage, StorageError
 
 
 def _arguments() -> argparse.Namespace:
@@ -53,7 +53,11 @@ def main() -> int:
             logging.error("Telegram validation failed: %s", error)
             return 2
         logging.info("Telegram validation succeeded for @%s; recipient access verified", username)
-    storage = MonitorStorage(settings.storage.db_path)
+    try:
+        storage = MonitorStorage(settings.storage.db_path)
+    except StorageError as error:
+        logging.error("storage error: %s", error)
+        return 2
     try:
         scanner = PlaywrightScanner(settings)
         console_notifier = ConsoleNotifier()
