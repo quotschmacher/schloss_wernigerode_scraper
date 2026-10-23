@@ -100,6 +100,57 @@ class StaticScanner:
         return ScanResult([self.appointment], set(), 1)
 
 
+class StaticResultScanner:
+    def __init__(self, result: ScanResult) -> None:
+        self.result = result
+
+    async def scan(self) -> ScanResult:
+        return self.result
+
+
+class NoopNotifier:
+    def report_slots(self, appointments, annotations=None) -> None:
+        del appointments, annotations
+
+    def notify(self, changes, annotations=None) -> None:
+        del changes, annotations
+
+
+@pytest.mark.asyncio
+async def test_scan_summary_separates_available_and_sold_out_slots(tmp_path: Path, caplog) -> None:
+    caplog.set_level("INFO")
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = load_settings(config)
+    observed_at = datetime.now(ZoneInfo("UTC"))
+    available = Appointment(
+        event_key="magische-tiere-2026-11-10-1130",
+        start_at=datetime(2026, 11, 10, 11, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+        status=AppointmentStatus.AVAILABLE,
+        available_places=5,
+        detail_url="https://example.test/detail",
+        booking_url="https://example.test/booking",
+        observed_at=observed_at,
+        count_source=CountSource.TICKETFRITZ_EXACT,
+    )
+    sold_out = Appointment(
+        event_key="magische-tiere-2026-11-10-1330",
+        start_at=datetime(2026, 11, 10, 13, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+        status=AppointmentStatus.SOLD_OUT,
+        available_places=0,
+        detail_url="https://example.test/detail",
+        booking_url="https://example.test/booking",
+        observed_at=observed_at,
+        count_source=CountSource.TICKETFRITZ_SOLD_OUT,
+    )
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+
+    await run_once(settings, storage, StaticResultScanner(ScanResult([available, sold_out], set(), 1)), NoopNotifier())
+
+    assert "scan finished days=1 slots=2 available=1 sold_out=1 changes=1" in caplog.text
+    storage.close()
+
+
 @pytest.mark.asyncio
 async def test_notification_failure_does_not_commit_new_snapshot(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"

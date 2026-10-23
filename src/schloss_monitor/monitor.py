@@ -199,10 +199,18 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
     changes = storage.preview_successful_scan(result.appointments, result.protected_dates)
     notifier.notify(changes, result.annotations)
     storage.commit_successful_scan(result.appointments, result.protected_dates)
+    available_slots = sum(
+        appointment.status is AppointmentStatus.AVAILABLE for appointment in result.appointments
+    )
+    sold_out_slots = sum(
+        appointment.status is AppointmentStatus.SOLD_OUT for appointment in result.appointments
+    )
     LOG.info(
-        "scan finished days=%s slots=%s changes=%s",
+        "scan finished days=%s slots=%s available=%s sold_out=%s changes=%s",
         result.calendar_days,
         len(result.appointments),
+        available_slots,
+        sold_out_slots,
         len(changes),
     )
     return len(changes)
