@@ -12,6 +12,7 @@ from ..school_holidays import SlotAnnotation
 
 type Transport = Callable[[str], bytes]
 type PostTransport = Callable[[str, bytes], bytes]
+_MAX_TELEGRAM_MESSAGE_LENGTH = 4096
 
 
 class TelegramApiError(RuntimeError):
@@ -110,19 +111,37 @@ class TelegramNotifier:
         assert self.bot_token is not None
         assert self.chat_id is not None
         url = f"https://api.telegram.org/bot{quote(self.bot_token, safe='')}/sendMessage"
-        body = urlencode(
-            {
-                "chat_id": self.chat_id,
-                "text": self._message_text(changes, annotations),
-                "disable_web_page_preview": "true",
-            }
-        ).encode()
-        _telegram_response(self.post_transport(url, body), "sendMessage")
+        for message in self._message_texts(changes, annotations):
+            body = urlencode(
+                {
+                    "chat_id": self.chat_id,
+                    "text": message,
+                    "disable_web_page_preview": "true",
+                }
+            ).encode()
+            _telegram_response(self.post_transport(url, body), "sendMessage")
 
     @staticmethod
-    def _message_text(
+    def _message_texts(
         changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation]
-    ) -> str:
+    ) -> list[str]:
+        header = "Neue freie Plätze:"
+        messages: list[str] = []
+        current = header
+        for entry in TelegramNotifier._alert_entries(changes, annotations):
+            candidate = f"{current}\n\n{entry}"
+            if len(candidate) <= _MAX_TELEGRAM_MESSAGE_LENGTH:
+                current = candidate
+                continue
+            messages.append(current)
+            current = f"{header}\n\n{entry}"
+        messages.append(current)
+        return messages
+
+    @staticmethod
+    def _alert_entries(
+        changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation]
+    ) -> list[str]:
         weekdays = (
             "Montag",
             "Dienstag",
@@ -132,7 +151,7 @@ class TelegramNotifier:
             "Samstag",
             "Sonntag",
         )
-        lines = ["Neue freie Plätze:", ""]
+        entries: list[str] = []
         for change in sorted(changes, key=lambda item: item.appointment.start_at):
             appointment = change.appointment
             weekday = weekdays[appointment.start_at.weekday()]
@@ -140,12 +159,13 @@ class TelegramNotifier:
             label = "NEU" if change.kind is ChangeType.NEW else "MEHR"
             annotation = annotations.get(appointment.event_key)
             markers = f" [{' | '.join(annotation.labels)}]" if annotation and annotation.labels else ""
-            lines.extend(
-                [
-                    f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze{markers}",
-                    appointment.booking_url,
-                    "",
-                ]
+            entries.append(
+                "\n".join(
+                    [
+                        f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze{markers}",
+                        appointment.booking_url,
+                    ]
+                )
             )
-        return "\n".join(lines).rstrip()
+        return entries
 

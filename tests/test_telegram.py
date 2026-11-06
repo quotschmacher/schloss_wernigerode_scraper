@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime
 from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
@@ -93,6 +94,39 @@ def test_telegram_notifier_batches_alertable_changes_into_one_structured_message
     assert "[MEHR] Dienstag, 10.11.2026, 14:30 – 7 freie Plätze" in message
     assert "https://example.test/booking/1130" in message
     assert "https://example.test/booking/1430" in message
+
+
+def test_telegram_notifier_splits_large_alert_batches_within_telegram_limit() -> None:
+    sent: list[tuple[str, bytes]] = []
+
+    def post_transport(url: str, body: bytes) -> bytes:
+        sent.append((url, body))
+        return b'{"ok":true,"result":{"message_id":1}}'
+
+    notifier = TelegramNotifier(
+        enabled=True,
+        bot_token="test-token",
+        chat_id="123456",
+        post_transport=post_transport,
+    )
+    changes = [
+        Change(
+            ChangeType.NEW,
+            replace(
+                appointment(5),
+                event_key=f"magische-tiere-{index}",
+                booking_url=f"https://example.test/booking/{index}/{'x' * 120}",
+            ),
+        )
+        for index in range(50)
+    ]
+
+    notifier.notify(changes)
+
+    messages = [parse_qs(body.decode())["text"][0] for _, body in sent]
+    assert len(messages) > 1
+    assert all(len(message) <= 4096 for message in messages)
+    assert all(f"https://example.test/booking/{index}/" in "\n".join(messages) for index in range(50))
 
 
 def test_disabled_telegram_notifier_does_not_send() -> None:
