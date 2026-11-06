@@ -50,8 +50,9 @@ async def test_poll_telegram_commands_persists_offset_sends_help_and_returns_sca
         def send_help(self, chat_id: str) -> None:
             self.help_chat_ids.append(chat_id)
 
-        def send_list(self, chat_id: str, appointments) -> None:
+        def send_list(self, chat_id: str, appointments, annotations) -> None:
             assert chat_id == "123456"
+            assert annotations == {}
             self.list_counts.append(len(appointments))
 
     client = CommandClient()

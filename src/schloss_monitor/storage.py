@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import Appointment, AppointmentStatus, Change, ChangeType, CountSource
+from .school_holidays import SlotAnnotation
 
 
 class StorageError(RuntimeError):
@@ -55,6 +58,11 @@ class MonitorStorage:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS appointment_annotations (
+                event_key TEXT PRIMARY KEY,
+                is_weekend INTEGER NOT NULL,
+                holiday_names TEXT NOT NULL
+            );
             """
         )
         self.connection.commit()
@@ -65,6 +73,16 @@ class MonitorStorage:
     def current_appointments(self) -> dict[str, Appointment]:
         rows = self.connection.execute("SELECT * FROM appointments ORDER BY start_at").fetchall()
         return {row["event_key"]: self._appointment_from_row(row) for row in rows}
+
+    def current_annotations(self) -> dict[str, SlotAnnotation]:
+        rows = self.connection.execute("SELECT * FROM appointment_annotations").fetchall()
+        return {
+            row["event_key"]: SlotAnnotation(
+                is_weekend=bool(row["is_weekend"]),
+                holiday_names=tuple(json.loads(row["holiday_names"])),
+            )
+            for row in rows
+        }
 
     def telegram_update_offset(self) -> int | None:
         row = self.connection.execute(
@@ -101,7 +119,10 @@ class MonitorStorage:
         return self._changes(previous, current)
 
     def commit_successful_scan(
-        self, appointments: list[Appointment], protected_dates: set[str] | None = None
+        self,
+        appointments: list[Appointment],
+        protected_dates: set[str] | None = None,
+        annotations: Mapping[str, SlotAnnotation] | None = None,
     ) -> list[Change]:
         current = {appointment.event_key: appointment for appointment in appointments}
         previous = self.current_appointments()
@@ -109,6 +130,7 @@ class MonitorStorage:
             if appointment.start_at.date().isoformat() in (protected_dates or set()) and key not in current:
                 current[key] = appointment
         changes = self._changes(previous, current)
+        annotations = annotations or {}
         now = datetime.now(UTC).isoformat()
         with self.connection:
             self.connection.execute(
@@ -116,6 +138,7 @@ class MonitorStorage:
                 (now, now, "SUCCESS", len(appointments)),
             )
             self.connection.execute("DELETE FROM appointments")
+            self.connection.execute("DELETE FROM appointment_annotations")
             for appointment in sorted(appointments, key=lambda item: item.start_at):
                 old = previous.get(appointment.event_key)
                 changed = old != appointment
@@ -139,6 +162,19 @@ class MonitorStorage:
                         now if changed else (old.observed_at.astimezone(UTC).isoformat() if old else now),
                     ),
                 )
+                annotation = annotations.get(appointment.event_key)
+                if annotation is not None:
+                    self.connection.execute(
+                        """
+                        INSERT INTO appointment_annotations (event_key, is_weekend, holiday_names)
+                        VALUES (?, ?, ?)
+                        """,
+                        (
+                            appointment.event_key,
+                            int(annotation.is_weekend),
+                            json.dumps(annotation.holiday_names),
+                        ),
+                    )
         return changes
 
     @staticmethod

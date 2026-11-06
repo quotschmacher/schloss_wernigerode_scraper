@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
 from schloss_monitor.models import Appointment, AppointmentStatus, CountSource
+from schloss_monitor.school_holidays import SlotAnnotation
 from schloss_monitor.telegram_commands import TelegramCommandClient, TelegramCommandKind
 
 
@@ -59,12 +60,12 @@ def test_telegram_command_client_sends_stored_free_slots() -> None:
     ]
     client = TelegramCommandClient(bot_token="test-token", chat_id="123456", post_transport=post_transport)
 
-    client.send_list("123456", appointments)
+    client.send_list("123456", appointments, {"a": SlotAnnotation(True, ("Herbstferien",))})
 
     message = parse_qs(sent[0][1].decode())["text"][0]
     assert "Gespeicherte freie Termine:" in message
-    assert "10.11.2026, 11:30 – 5 freie Plätze" in message
-    assert "10.11.2026, 14:30 – buchbar, exakte Platzzahl unbekannt" in message
+    assert "[FREI] 10.11.2026 11:30 – 5 Plätze frei [WOCHENENDE | SCHULFERIEN: Herbstferien]" in message
+    assert "[FREI] 10.11.2026 14:30 – buchbar, exakte Platzzahl nicht ermittelbar" in message
     assert "https://example.test/booking/1130" in message
 
 

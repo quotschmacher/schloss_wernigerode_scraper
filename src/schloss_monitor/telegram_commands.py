@@ -14,6 +14,7 @@ from .notifiers.telegram import (
     _default_transport,
     _telegram_response,
 )
+from .school_holidays import SlotAnnotation
 
 
 class TelegramCommandKind(StrEnum):
@@ -82,7 +83,13 @@ class TelegramCommandClient:
             raise ValueError("Telegram getUpdates response did not contain an update list")
         return [update for update in result if isinstance(update, dict)]
 
-    def send_list(self, chat_id: str, appointments: Sequence[Appointment]) -> None:
+    def send_list(
+        self,
+        chat_id: str,
+        appointments: Sequence[Appointment],
+        annotations: Mapping[str, SlotAnnotation] | None = None,
+    ) -> None:
+        annotations = annotations or {}
         available = sorted(
             (appointment for appointment in appointments if appointment.status is AppointmentStatus.AVAILABLE),
             key=lambda appointment: appointment.start_at,
@@ -92,13 +99,15 @@ class TelegramCommandClient:
             return
         entries = []
         for appointment in available:
-            when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
+            when = appointment.start_at.strftime("%d.%m.%Y %H:%M")
+            annotation = annotations.get(appointment.event_key)
+            markers = f" [{' | '.join(annotation.labels)}]" if annotation and annotation.labels else ""
             availability = (
-                f"{appointment.available_places} freie Plätze"
+                f"{appointment.available_places} Plätze frei"
                 if appointment.available_places is not None
-                else "buchbar, exakte Platzzahl unbekannt"
+                else "buchbar, exakte Platzzahl nicht ermittelbar"
             )
-            entries.append(f"• {when} – {availability}\n{appointment.booking_url}")
+            entries.append(f"[FREI] {when} – {availability}{markers}\n{appointment.booking_url}")
         self._send_entries(chat_id, "Gespeicherte freie Termine:", entries)
 
     def _send_entries(self, chat_id: str, header: str, entries: Sequence[str]) -> None:

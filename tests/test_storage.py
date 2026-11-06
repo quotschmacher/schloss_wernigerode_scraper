@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from schloss_monitor.models import Appointment, AppointmentStatus, ChangeType, CountSource
+from schloss_monitor.school_holidays import SlotAnnotation
 from schloss_monitor.storage import MonitorStorage, StorageError
 
 UTC = ZoneInfo("UTC")
@@ -75,3 +76,14 @@ def test_storage_persists_telegram_update_offset(tmp_path: Path) -> None:
     reopened = MonitorStorage(database)
     assert reopened.telegram_update_offset() == 42
     reopened.close()
+
+
+def test_storage_persists_calendar_annotations_for_database_lists(tmp_path: Path) -> None:
+    storage = MonitorStorage(tmp_path / "appointments.sqlite3")
+    item = appointment("magische-tiere-2026-11-10-11", 5)
+    annotations = {item.event_key: SlotAnnotation(True, ("Herbstferien",))}
+
+    storage.commit_successful_scan([item], annotations=annotations)
+
+    assert storage.current_annotations() == annotations
+    storage.close()

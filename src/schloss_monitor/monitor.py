@@ -204,7 +204,12 @@ async def poll_telegram_commands(
         if command.kind is TelegramCommandKind.HELP:
             await asyncio.to_thread(client.send_help, command.chat_id)
         elif command.kind is TelegramCommandKind.LIST:
-            await asyncio.to_thread(client.send_list, command.chat_id, list(storage.current_appointments().values()))
+            await asyncio.to_thread(
+                client.send_list,
+                command.chat_id,
+                list(storage.current_appointments().values()),
+                storage.current_annotations(),
+            )
         elif command.kind is TelegramCommandKind.SCAN:
             if (
                 completed_scan_window is not None
@@ -226,7 +231,7 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
     notifier.report_slots(result.appointments, result.annotations)
     changes = storage.preview_successful_scan(result.appointments, result.protected_dates)
     notifier.notify(changes, result.annotations)
-    storage.commit_successful_scan(result.appointments, result.protected_dates)
+    storage.commit_successful_scan(result.appointments, result.protected_dates, result.annotations)
     available_slots = sum(
         appointment.status is AppointmentStatus.AVAILABLE for appointment in result.appointments
     )
