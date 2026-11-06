@@ -19,6 +19,7 @@ from .models import Appointment, AppointmentStatus, Availability, CountSource
 from .notifiers.base import Notifier
 from .school_holidays import SchoolHolidayError, SchoolHolidayProvider, SlotAnnotation
 from .storage import MonitorStorage
+from .telegram_commands import TelegramCommandClient, TelegramCommandKind
 
 LOG = logging.getLogger(__name__)
 
@@ -183,6 +184,25 @@ class PlaywrightScanner:
             await button.click(no_wait_after=True)
 
 
+async def poll_telegram_commands(storage: MonitorStorage, client: TelegramCommandClient) -> list[str]:
+    offset = storage.telegram_update_offset()
+    updates = await asyncio.to_thread(client.fetch_updates, offset)
+    update_ids: list[int] = []
+    for update in updates:
+        update_id = update.get("update_id")
+        if isinstance(update_id, int):
+            update_ids.append(update_id)
+    if update_ids:
+        storage.set_telegram_update_offset(max(update_ids) + 1)
+    scan_requesters: list[str] = []
+    for command in client.parse_updates(updates):
+        if command.kind is TelegramCommandKind.HELP:
+            await asyncio.to_thread(client.send_help, command.chat_id)
+        elif command.kind is TelegramCommandKind.SCAN:
+            scan_requesters.append(command.chat_id)
+    return scan_requesters
+
+
 async def run_once(settings: Settings, storage: MonitorStorage, scanner: PlaywrightScanner, notifier: Notifier) -> int:
     try:
         result = await scanner.scan()
@@ -210,23 +230,60 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
     return len(changes)
 
 
+async def wait_for_next_scan(
+    *,
+    interval_seconds: int,
+    command_poll_seconds: int,
+    stop_event: asyncio.Event,
+    storage: MonitorStorage,
+    command_client: TelegramCommandClient | None,
+) -> list[str]:
+    deadline = asyncio.get_running_loop().time() + interval_seconds
+    while not stop_event.is_set():
+        if command_client is not None:
+            scan_requesters = await poll_telegram_commands(storage, command_client)
+            if scan_requesters:
+                return scan_requesters
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            return []
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=min(command_poll_seconds, remaining))
+        except TimeoutError:
+            continue
+    return []
+
+
 async def run_forever(
     settings: Settings,
     storage: MonitorStorage,
     scanner: PlaywrightScanner,
     notifier: Notifier,
     stop_event: asyncio.Event | None = None,
+    command_client: TelegramCommandClient | None = None,
 ) -> None:
     stop_event = stop_event or asyncio.Event()
+    scan_requesters: list[str] = []
     while not stop_event.is_set():
         try:
-            await run_once(settings, storage, scanner, notifier)
-        except Exception:
+            changes = await run_once(settings, storage, scanner, notifier)
+        except Exception as error:
             LOG.exception("scan failed; stored appointment snapshot was left untouched")
+            if command_client is not None:
+                for chat_id in set(scan_requesters):
+                    await asyncio.to_thread(command_client.send_scan_failure, chat_id, str(error))
+        else:
+            if command_client is not None:
+                for chat_id in set(scan_requesters):
+                    await asyncio.to_thread(command_client.send_scan_result, chat_id, changes=changes)
+        scan_requesters = []
         if stop_event.is_set():
             break
         LOG.info("next scan in %s seconds", settings.monitor.interval_seconds)
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=settings.monitor.interval_seconds)
-        except TimeoutError:
-            continue
+        scan_requesters = await wait_for_next_scan(
+            interval_seconds=settings.monitor.interval_seconds,
+            command_poll_seconds=settings.telegram.command_poll_seconds,
+            stop_event=stop_event,
+            storage=storage,
+            command_client=command_client,
+        )

@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from urllib.parse import quote, urlencode
 
-from .notifiers.telegram import PostTransport, _default_post_transport, _telegram_response
+from .notifiers.telegram import (
+    PostTransport,
+    Transport,
+    _default_post_transport,
+    _default_transport,
+    _telegram_response,
+)
 
 
 class TelegramCommandKind(StrEnum):
@@ -26,6 +32,7 @@ class TelegramCommand:
 class TelegramCommandClient:
     bot_token: str
     chat_id: str
+    transport: Transport = _default_transport
     post_transport: PostTransport = _default_post_transport
 
     def register_commands(self) -> None:
@@ -57,6 +64,30 @@ class TelegramCommandClient:
                 ),
             },
         )
+
+    def fetch_updates(self, offset: int | None) -> list[dict[str, object]]:
+        query = urlencode(
+            {
+                "offset": offset or 0,
+                "timeout": 0,
+                "allowed_updates": json.dumps(["message"]),
+            }
+        )
+        url = f"https://api.telegram.org/bot{quote(self.bot_token, safe='')}/getUpdates?{query}"
+        payload = _telegram_response(self.transport(url), "getUpdates")
+        result = payload.get("result")
+        if not isinstance(result, list):
+            raise ValueError("Telegram getUpdates response did not contain an update list")
+        return [update for update in result if isinstance(update, dict)]
+
+    def send_scan_result(self, chat_id: str, *, changes: int) -> None:
+        self._send_text(chat_id, f"[OK] Manueller Scan abgeschlossen. Änderungen: {changes}.")
+
+    def send_scan_failure(self, chat_id: str, error: str) -> None:
+        self._send_text(chat_id, f"[FEHLER] Manueller Scan fehlgeschlagen: {error}")
+
+    def _send_text(self, chat_id: str, text: str) -> None:
+        self._post("sendMessage", {"chat_id": chat_id, "text": text})
 
     def parse_updates(self, updates: Sequence[object]) -> list[TelegramCommand]:
         commands: list[TelegramCommand] = []

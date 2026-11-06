@@ -13,14 +13,123 @@ from schloss_monitor.models import Appointment, AppointmentStatus, Availability,
 from schloss_monitor.monitor import (
     PlaywrightScanner,
     ScanResult,
+    poll_telegram_commands,
     retry_async,
     run_forever,
     run_once,
+    wait_for_next_scan,
     wait_for_page_ready,
 )
 from schloss_monitor.notifiers.console import ConsoleNotifier
 from schloss_monitor.notifiers.telegram import TelegramApiError
 from schloss_monitor.storage import MonitorStorage
+from schloss_monitor.telegram_commands import TelegramCommand, TelegramCommandKind
+
+
+@pytest.mark.asyncio
+async def test_poll_telegram_commands_persists_offset_sends_help_and_returns_scan_requests(tmp_path: Path) -> None:
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+
+    class CommandClient:
+        def __init__(self) -> None:
+            self.help_chat_ids: list[str] = []
+
+        def fetch_updates(self, offset: int | None):
+            assert offset is None
+            return [{"update_id": 12}, {"update_id": 13}]
+
+        def parse_updates(self, updates):
+            assert updates == [{"update_id": 12}, {"update_id": 13}]
+            return [
+                TelegramCommand(TelegramCommandKind.HELP, "123456", 12),
+                TelegramCommand(TelegramCommandKind.SCAN, "123456", 13),
+            ]
+
+        def send_help(self, chat_id: str) -> None:
+            self.help_chat_ids.append(chat_id)
+
+    client = CommandClient()
+
+    assert await poll_telegram_commands(storage, client) == ["123456"]
+    assert storage.telegram_update_offset() == 14
+    assert client.help_chat_ids == ["123456"]
+    storage.close()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_scan_returns_telegram_scan_request_without_waiting_interval(tmp_path: Path) -> None:
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+    stop_event = asyncio.Event()
+
+    class CommandClient:
+        def fetch_updates(self, offset: int | None):
+            assert offset is None
+            return [{"update_id": 5}]
+
+        def parse_updates(self, updates):
+            assert updates == [{"update_id": 5}]
+            return [TelegramCommand(TelegramCommandKind.SCAN, "123456", 5)]
+
+        def send_help(self, chat_id: str) -> None:
+            raise AssertionError(f"unexpected help response for {chat_id}")
+
+    assert await wait_for_next_scan(
+        interval_seconds=3600,
+        command_poll_seconds=5,
+        stop_event=stop_event,
+        storage=storage,
+        command_client=CommandClient(),
+    ) == ["123456"]
+    storage.close()
+
+
+@pytest.mark.asyncio
+async def test_run_forever_acknowledges_manual_scan_completion(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = load_settings(config)
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+    stop_event = asyncio.Event()
+    item = Appointment(
+        event_key="magische-tiere-2026-11-10-1130",
+        start_at=datetime(2026, 11, 10, 11, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+        status=AppointmentStatus.AVAILABLE,
+        available_places=5,
+        detail_url="https://example.test/detail",
+        booking_url="https://example.test/booking",
+        observed_at=datetime.now(ZoneInfo("UTC")),
+        count_source=CountSource.TICKETFRITZ_EXACT,
+    )
+
+    class CommandClient:
+        def __init__(self) -> None:
+            self.fetches = 0
+            self.results: list[tuple[str, int]] = []
+
+        def fetch_updates(self, offset: int | None):
+            self.fetches += 1
+            assert offset is None
+            return [{"update_id": 1}]
+
+        def parse_updates(self, updates):
+            assert updates == [{"update_id": 1}]
+            return [TelegramCommand(TelegramCommandKind.SCAN, "123456", 1)]
+
+        def send_help(self, chat_id: str) -> None:
+            raise AssertionError(f"unexpected help response for {chat_id}")
+
+        def send_scan_result(self, chat_id: str, *, changes: int) -> None:
+            self.results.append((chat_id, changes))
+            stop_event.set()
+
+        def send_scan_failure(self, chat_id: str, error: str) -> None:
+            raise AssertionError(f"unexpected scan failure {chat_id}: {error}")
+
+    client = CommandClient()
+    await run_forever(settings, storage, StaticScanner(item), NoopNotifier(), stop_event, client)
+
+    assert client.results == [("123456", 0)]
+    storage.close()
 
 
 @pytest.mark.asyncio
