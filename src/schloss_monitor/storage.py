@@ -51,6 +51,10 @@ class MonitorStorage:
                 slots_examined INTEGER NOT NULL DEFAULT 0,
                 error_message TEXT NULL
             );
+            CREATE TABLE IF NOT EXISTS monitor_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
         self.connection.commit()
@@ -61,6 +65,22 @@ class MonitorStorage:
     def current_appointments(self) -> dict[str, Appointment]:
         rows = self.connection.execute("SELECT * FROM appointments ORDER BY start_at").fetchall()
         return {row["event_key"]: self._appointment_from_row(row) for row in rows}
+
+    def telegram_update_offset(self) -> int | None:
+        row = self.connection.execute(
+            "SELECT value FROM monitor_state WHERE key = 'telegram_update_offset'"
+        ).fetchone()
+        return int(row["value"]) if row else None
+
+    def set_telegram_update_offset(self, offset: int) -> None:
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO monitor_state (key, value) VALUES ('telegram_update_offset', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (str(offset),),
+            )
 
     def record_failed_scan(self, error_message: str) -> None:
         now = datetime.now(UTC).isoformat()

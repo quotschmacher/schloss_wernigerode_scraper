@@ -61,3 +61,17 @@ def test_storage_persists_only_successful_scans_and_emits_deltas(tmp_path: Path)
     reopened = MonitorStorage(database)
     assert set(reopened.current_appointments()) == {"magische-tiere-2026-11-10-11"}
     reopened.close()
+
+
+def test_storage_persists_telegram_update_offset(tmp_path: Path) -> None:
+    database = tmp_path / "appointments.sqlite3"
+    storage = MonitorStorage(database)
+
+    assert storage.telegram_update_offset() is None
+    storage.set_telegram_update_offset(42)
+    assert storage.telegram_update_offset() == 42
+    storage.close()
+
+    reopened = MonitorStorage(database)
+    assert reopened.telegram_update_offset() == 42
+    reopened.close()
