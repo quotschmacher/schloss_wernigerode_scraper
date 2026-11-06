@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from schloss_monitor.config import load_settings
-from schloss_monitor.models import Appointment, AppointmentStatus, CountSource
+from schloss_monitor.models import Appointment, AppointmentStatus, Availability, CountSource
 from schloss_monitor.monitor import (
     PlaywrightScanner,
     ScanResult,
@@ -129,6 +129,17 @@ async def test_booking_availability_uses_public_api_without_booking_page_navigat
         "https://schloss-wernigerode.ticketfritz.de/Event/getEvents?"
         "ZeitpunktVon=2026-11-10&ZeitpunktBis=2026-11-10&Typ=Vorlage&Wert=&VorlageOid=31935"
     ]
+
+
+def test_unverified_ticketfritz_response_keeps_detail_page_slot_as_available_unknown() -> None:
+    availability = PlaywrightScanner._availability_for_detail_slot(
+        Availability(AppointmentStatus.UNKNOWN, None, CountSource.UNKNOWN),
+        datetime(2026, 12, 18, 13, 30, tzinfo=ZoneInfo("Europe/Berlin")),
+    )
+
+    assert availability.status is AppointmentStatus.AVAILABLE
+    assert availability.available_places is None
+    assert availability.source is CountSource.UNKNOWN
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,7 @@ from .booking_scraper import parse_ticketfritz_availability
 from .calendar_scraper import CalendarScraper
 from .config import Settings
 from .detail_scraper import parse_detail_slots
-from .models import Appointment, AppointmentStatus
+from .models import Appointment, AppointmentStatus, Availability, CountSource
 from .notifiers.base import Notifier
 from .school_holidays import SchoolHolidayError, SchoolHolidayProvider, SlotAnnotation
 from .storage import MonitorStorage
@@ -85,9 +85,10 @@ class PlaywrightScanner:
                         timeout=self.settings.scraper.navigation_timeout_ms,
                     )
                     for slot in parse_detail_slots(await detail_page.content(), entry.detail_url):
-                        availability = await self._booking_availability(booking_page, slot.booking_url, slot.start_at)
-                        if availability.status is AppointmentStatus.UNKNOWN:
-                            raise ScanError(f"booking response did not verify slot {slot.start_at.isoformat()}")
+                        availability = self._availability_for_detail_slot(
+                            await self._booking_availability(booking_page, slot.booking_url, slot.start_at),
+                            slot.start_at,
+                        )
                         event_key = f"magische-tiere-{slot.start_at:%Y-%m-%d-%H%M}"
                         appointments.append(
                             Appointment(
@@ -123,6 +124,17 @@ class PlaywrightScanner:
             appointment.event_key: by_date.get(appointment.start_at.date(), fallback[appointment.start_at.date()])
             for appointment in appointments
         }
+
+    @staticmethod
+    def _availability_for_detail_slot(availability: Availability, start_at: datetime) -> Availability:
+        if availability.status is not AppointmentStatus.UNKNOWN:
+            return availability
+        LOG.warning(
+            "Ticketfritz did not verify exact availability; recording detail-page slot as available with unknown count "
+            "start_at=%s",
+            start_at.isoformat(),
+        )
+        return Availability(AppointmentStatus.AVAILABLE, None, CountSource.UNKNOWN)
 
     async def _booking_availability(self, page: Page, booking_url: str, start_at: datetime):
         template_id = self._template_id(booking_url)
