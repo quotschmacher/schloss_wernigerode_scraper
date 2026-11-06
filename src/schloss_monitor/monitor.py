@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -184,7 +185,11 @@ class PlaywrightScanner:
             await button.click(no_wait_after=True)
 
 
-async def poll_telegram_commands(storage: MonitorStorage, client: TelegramCommandClient) -> list[str]:
+async def poll_telegram_commands(
+    storage: MonitorStorage,
+    client: TelegramCommandClient,
+    completed_scan_window: tuple[int, int] | None = None,
+) -> list[str]:
     offset = storage.telegram_update_offset()
     updates = await asyncio.to_thread(client.fetch_updates, offset)
     update_ids: list[int] = []
@@ -201,6 +206,13 @@ async def poll_telegram_commands(storage: MonitorStorage, client: TelegramComman
         elif command.kind is TelegramCommandKind.LIST:
             await asyncio.to_thread(client.send_list, command.chat_id, list(storage.current_appointments().values()))
         elif command.kind is TelegramCommandKind.SCAN:
+            if (
+                completed_scan_window is not None
+                and command.received_at is not None
+                and completed_scan_window[0] <= command.received_at <= completed_scan_window[1]
+            ):
+                await asyncio.to_thread(client.send_scan_already_running, command.chat_id)
+                continue
             scan_requesters.append(command.chat_id)
     return scan_requesters
 
@@ -239,11 +251,16 @@ async def wait_for_next_scan(
     stop_event: asyncio.Event,
     storage: MonitorStorage,
     command_client: TelegramCommandClient | None,
+    completed_scan_window: tuple[int, int] | None = None,
 ) -> list[str]:
     deadline = asyncio.get_running_loop().time() + interval_seconds
     while not stop_event.is_set():
         if command_client is not None:
-            scan_requesters = await poll_telegram_commands(storage, command_client)
+            scan_requesters = await poll_telegram_commands(
+                storage,
+                command_client,
+                completed_scan_window,
+            )
             if scan_requesters:
                 return scan_requesters
         remaining = deadline - asyncio.get_running_loop().time()
@@ -267,6 +284,7 @@ async def run_forever(
     stop_event = stop_event or asyncio.Event()
     scan_requesters: list[str] = []
     while not stop_event.is_set():
+        scan_started_at = int(time.time())
         try:
             changes = await run_once(settings, storage, scanner, notifier)
         except Exception as error:
@@ -278,6 +296,7 @@ async def run_forever(
             if command_client is not None:
                 for chat_id in set(scan_requesters):
                     await asyncio.to_thread(command_client.send_scan_result, chat_id, changes=changes)
+        scan_finished_at = int(time.time())
         scan_requesters = []
         if stop_event.is_set():
             break
@@ -288,4 +307,5 @@ async def run_forever(
             stop_event=stop_event,
             storage=storage,
             command_client=command_client,
+            completed_scan_window=(scan_started_at, scan_finished_at),
         )

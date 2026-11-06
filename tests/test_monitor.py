@@ -64,6 +64,38 @@ async def test_poll_telegram_commands_persists_offset_sends_help_and_returns_sca
 
 
 @pytest.mark.asyncio
+async def test_poll_telegram_commands_rejects_scan_requested_during_completed_scan(tmp_path: Path) -> None:
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+
+    class CommandClient:
+        def __init__(self) -> None:
+            self.rejected_chat_ids: list[str] = []
+
+        def fetch_updates(self, offset: int | None):
+            assert offset is None
+            return [{"update_id": 17}]
+
+        def parse_updates(self, updates):
+            assert updates == [{"update_id": 17}]
+            return [TelegramCommand(TelegramCommandKind.SCAN, "123456", 17, received_at=20)]
+
+        def send_help(self, chat_id: str) -> None:
+            raise AssertionError(f"unexpected help response for {chat_id}")
+
+        def send_list(self, chat_id: str, appointments) -> None:
+            raise AssertionError(f"unexpected list response for {chat_id}")
+
+        def send_scan_already_running(self, chat_id: str) -> None:
+            self.rejected_chat_ids.append(chat_id)
+
+    client = CommandClient()
+
+    assert await poll_telegram_commands(storage, client, completed_scan_window=(10, 30)) == []
+    assert client.rejected_chat_ids == ["123456"]
+    storage.close()
+
+
+@pytest.mark.asyncio
 async def test_wait_for_next_scan_returns_telegram_scan_request_without_waiting_interval(tmp_path: Path) -> None:
     storage = MonitorStorage(tmp_path / "db.sqlite3")
     stop_event = asyncio.Event()

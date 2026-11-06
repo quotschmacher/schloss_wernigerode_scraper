@@ -27,6 +27,7 @@ class TelegramCommand:
     kind: TelegramCommandKind
     chat_id: str
     update_id: int
+    received_at: int | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,9 @@ class TelegramCommandClient:
     def send_scan_result(self, chat_id: str, *, changes: int) -> None:
         self._send_text(chat_id, f"[OK] Manueller Scan abgeschlossen. Änderungen: {changes}.")
 
+    def send_scan_already_running(self, chat_id: str) -> None:
+        self._send_text(chat_id, "[OK] Ein Scan lief bereits; kein weiterer Scan wurde vorgemerkt.")
+
     def send_scan_failure(self, chat_id: str, error: str) -> None:
         self._send_text(chat_id, f"[FEHLER] Manueller Scan fehlgeschlagen: {error}")
 
@@ -131,6 +135,7 @@ class TelegramCommandClient:
                 continue
             chat = message.get("chat")
             text = message.get("text")
+            received_at = message.get("date")
             if not isinstance(chat, Mapping) or not isinstance(text, str):
                 continue
             chat_id = str(chat.get("id", ""))
@@ -141,7 +146,14 @@ class TelegramCommandClient:
                 kind = TelegramCommandKind(command_name)
             except ValueError:
                 continue
-            commands.append(TelegramCommand(kind=kind, chat_id=chat_id, update_id=update_id))
+            commands.append(
+                TelegramCommand(
+                    kind=kind,
+                    chat_id=chat_id,
+                    update_id=update_id,
+                    received_at=received_at if isinstance(received_at, int) else None,
+                )
+            )
         return commands
 
     def _post(self, operation: str, values: Mapping[str, str]) -> None:

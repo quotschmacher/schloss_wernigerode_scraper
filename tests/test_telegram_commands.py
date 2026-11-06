@@ -79,11 +79,13 @@ def test_telegram_command_client_sends_scan_completion_status() -> None:
 
     client.send_scan_result("123456", changes=3)
     client.send_scan_failure("123456", "Ticketfritz timeout")
+    client.send_scan_already_running("123456")
 
     messages = [parse_qs(body.decode())["text"][0] for _, body in sent]
     assert messages == [
         "[OK] Manueller Scan abgeschlossen. Änderungen: 3.",
         "[FEHLER] Manueller Scan fehlgeschlagen: Ticketfritz timeout",
+        "[OK] Ein Scan lief bereits; kein weiterer Scan wurde vorgemerkt.",
     ]
 
 
