@@ -48,6 +48,8 @@ class TelegramSettings:
     enabled: bool
     bot_token: str | None
     chat_id: str | None
+    commands_enabled: bool
+    command_poll_seconds: int
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,14 @@ def load_settings(config_file: Path) -> Settings:
         raise ConfigError("TELEGRAM_BOT_TOKEN is required when Telegram is enabled")
     if telegram_enabled and not telegram_chat_id:
         raise ConfigError("TELEGRAM_CHAT_ID is required when Telegram is enabled")
+    telegram_commands_enabled = _as_bool(
+        os.environ.get("MONITOR_TELEGRAM_COMMANDS_ENABLED") or telegram.get("commands_enabled", True),
+        "telegram.commands_enabled",
+    )
+    telegram_command_poll_seconds = _as_int(
+        os.environ.get("MONITOR_TELEGRAM_COMMAND_POLL_SECONDS") or telegram.get("command_poll_seconds", 5),
+        "telegram.command_poll_seconds",
+    )
 
     return Settings(
         monitor=MonitorSettings(
@@ -184,5 +194,7 @@ def load_settings(config_file: Path) -> Settings:
             enabled=telegram_enabled,
             bot_token=telegram_bot_token,
             chat_id=telegram_chat_id,
+            commands_enabled=telegram_commands_enabled,
+            command_poll_seconds=telegram_command_poll_seconds,
         ),
     )

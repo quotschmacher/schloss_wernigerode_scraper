@@ -48,6 +48,8 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("MONITOR_TELEGRAM_ENABLED", "true")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    monkeypatch.setenv("MONITOR_TELEGRAM_COMMANDS_ENABLED", "false")
+    monkeypatch.setenv("MONITOR_TELEGRAM_COMMAND_POLL_SECONDS", "9")
 
     settings = load_settings(config_file)
 
@@ -60,6 +62,8 @@ def test_environment_overrides_toml_values(tmp_path: Path, monkeypatch: pytest.M
     assert settings.telegram.enabled is True
     assert settings.telegram.bot_token == "test-token"
     assert settings.telegram.chat_id == "123456"
+    assert settings.telegram.commands_enabled is False
+    assert settings.telegram.command_poll_seconds == 9
 
 
 def test_invalid_interval_is_rejected(tmp_path: Path) -> None:
