@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -76,6 +77,58 @@ class ReadyPage:
     async def wait_for_load_state(self, state: str, *, timeout: int) -> None:
         assert state == "domcontentloaded"
         assert timeout == 123
+
+
+@pytest.mark.asyncio
+async def test_booking_availability_uses_public_api_without_booking_page_navigation(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = load_settings(config)
+    start_at = datetime(2026, 11, 10, 11, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+
+    class Response:
+        status = 200
+
+        async def text(self) -> str:
+            return json.dumps(
+                {
+                    "data": [
+                        {
+                            "ZeitpunktBezeichnung": "10.11.2026 - 11:30",
+                            "AnzahlFrei": 7,
+                        }
+                    ]
+                }
+            )
+
+    class Request:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        async def get(self, url: str) -> Response:
+            self.urls.append(url)
+            return Response()
+
+    class Context:
+        def __init__(self) -> None:
+            self.request = Request()
+
+    class RequestOnlyPage:
+        def __init__(self) -> None:
+            self.context = Context()
+
+    page = RequestOnlyPage()
+    availability = await PlaywrightScanner(settings)._booking_availability(
+        page,
+        "https://schloss-wernigerode.ticketfritz.de/Event/Kalender/31935/59065?typ=Vorlage",
+        start_at,
+    )
+
+    assert availability.available_places == 7
+    assert page.context.request.urls == [
+        "https://schloss-wernigerode.ticketfritz.de/Event/getEvents?"
+        "ZeitpunktVon=2026-11-10&ZeitpunktBis=2026-11-10&Typ=Vorlage&Wert=&VorlageOid=31935"
+    ]
 
 
 @pytest.mark.asyncio

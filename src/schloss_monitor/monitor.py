@@ -125,17 +125,6 @@ class PlaywrightScanner:
         }
 
     async def _booking_availability(self, page: Page, booking_url: str, start_at: datetime):
-        await retry_async(
-            lambda: page.goto(
-                booking_url,
-                wait_until="domcontentloaded",
-                timeout=self.settings.scraper.navigation_timeout_ms,
-            ),
-            attempts=2,
-            delay_seconds=self.settings.scraper.request_delay_seconds,
-        )
-        await self._confirm_necessary_cookies(page)
-        await wait_for_page_ready(page, self.settings.scraper.navigation_timeout_ms)
         template_id = self._template_id(booking_url)
         query = urlencode(
             {
@@ -146,27 +135,20 @@ class PlaywrightScanner:
                 "VorlageOid": template_id,
             }
         )
-        endpoint = f"/Event/getEvents?{query}"
-        async def fetch_availability() -> object:
-            await wait_for_page_ready(page, self.settings.scraper.navigation_timeout_ms)
-            return await page.evaluate(
-                """async endpoint => {
-                    const response = await fetch(endpoint, {credentials: 'same-origin'});
-                    return {status: response.status, body: await response.text()};
-                }""",
-                endpoint,
-            )
+        parsed_booking_url = urlparse(booking_url)
+        endpoint = f"{parsed_booking_url.scheme}://{parsed_booking_url.netloc}/Event/getEvents?{query}"
 
-        response = await retry_async(
+        async def fetch_availability() -> tuple[int, str]:
+            response = await page.context.request.get(endpoint)
+            return response.status, await response.text()
+
+        status, body = await retry_async(
             fetch_availability,
             attempts=2,
             delay_seconds=self.settings.scraper.request_delay_seconds,
         )
-        if not isinstance(response, dict) or response.get("status") != 200:
-            raise ScanError(f"Ticketfritz availability request failed for {start_at.isoformat()}")
-        body = response.get("body")
-        if not isinstance(body, str):
-            raise ScanError("Ticketfritz availability response had no text body")
+        if status != 200:
+            raise ScanError(f"Ticketfritz availability request failed for {start_at.isoformat()} status={status}")
         return parse_ticketfritz_availability(body, start_at)
 
     @staticmethod
