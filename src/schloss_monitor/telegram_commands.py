@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from urllib.parse import quote, urlencode
 
+from .models import Appointment, AppointmentStatus
 from .notifiers.telegram import (
     PostTransport,
     Transport,
@@ -79,6 +80,36 @@ class TelegramCommandClient:
         if not isinstance(result, list):
             raise ValueError("Telegram getUpdates response did not contain an update list")
         return [update for update in result if isinstance(update, dict)]
+
+    def send_list(self, chat_id: str, appointments: Sequence[Appointment]) -> None:
+        available = sorted(
+            (appointment for appointment in appointments if appointment.status is AppointmentStatus.AVAILABLE),
+            key=lambda appointment: appointment.start_at,
+        )
+        if not available:
+            self._send_text(chat_id, "Keine gespeicherten freien Termine vorhanden.")
+            return
+        entries = []
+        for appointment in available:
+            when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
+            availability = (
+                f"{appointment.available_places} freie Plätze"
+                if appointment.available_places is not None
+                else "buchbar, exakte Platzzahl unbekannt"
+            )
+            entries.append(f"• {when} – {availability}\n{appointment.booking_url}")
+        self._send_entries(chat_id, "Gespeicherte freie Termine:", entries)
+
+    def _send_entries(self, chat_id: str, header: str, entries: Sequence[str]) -> None:
+        current = header
+        for entry in entries:
+            candidate = f"{current}\n\n{entry}"
+            if len(candidate) > 4096 and current != header:
+                self._send_text(chat_id, current)
+                current = f"{header}\n\n{entry}"
+            else:
+                current = candidate
+        self._send_text(chat_id, current)
 
     def send_scan_result(self, chat_id: str, *, changes: int) -> None:
         self._send_text(chat_id, f"[OK] Manueller Scan abgeschlossen. Änderungen: {changes}.")

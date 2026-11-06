@@ -33,26 +33,33 @@ async def test_poll_telegram_commands_persists_offset_sends_help_and_returns_sca
     class CommandClient:
         def __init__(self) -> None:
             self.help_chat_ids: list[str] = []
+            self.list_counts: list[int] = []
 
         def fetch_updates(self, offset: int | None):
             assert offset is None
-            return [{"update_id": 12}, {"update_id": 13}]
+            return [{"update_id": 12}, {"update_id": 13}, {"update_id": 14}]
 
         def parse_updates(self, updates):
-            assert updates == [{"update_id": 12}, {"update_id": 13}]
+            assert updates == [{"update_id": 12}, {"update_id": 13}, {"update_id": 14}]
             return [
                 TelegramCommand(TelegramCommandKind.HELP, "123456", 12),
                 TelegramCommand(TelegramCommandKind.SCAN, "123456", 13),
+                TelegramCommand(TelegramCommandKind.LIST, "123456", 14),
             ]
 
         def send_help(self, chat_id: str) -> None:
             self.help_chat_ids.append(chat_id)
 
+        def send_list(self, chat_id: str, appointments) -> None:
+            assert chat_id == "123456"
+            self.list_counts.append(len(appointments))
+
     client = CommandClient()
 
     assert await poll_telegram_commands(storage, client) == ["123456"]
-    assert storage.telegram_update_offset() == 14
+    assert storage.telegram_update_offset() == 15
     assert client.help_chat_ids == ["123456"]
+    assert client.list_counts == [0]
     storage.close()
 
 

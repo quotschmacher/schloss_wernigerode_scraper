@@ -198,6 +198,8 @@ async def poll_telegram_commands(storage: MonitorStorage, client: TelegramComman
     for command in client.parse_updates(updates):
         if command.kind is TelegramCommandKind.HELP:
             await asyncio.to_thread(client.send_help, command.chat_id)
+        elif command.kind is TelegramCommandKind.LIST:
+            await asyncio.to_thread(client.send_list, command.chat_id, list(storage.current_appointments().values()))
         elif command.kind is TelegramCommandKind.SCAN:
             scan_requesters.append(command.chat_id)
     return scan_requesters

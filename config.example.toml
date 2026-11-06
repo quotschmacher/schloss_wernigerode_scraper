@@ -23,3 +23,6 @@ federal_state = "sachsen-anhalt"
 
 [telegram]
 enabled = false
+# Allows /scan, /list, and /help from TELEGRAM_CHAT_ID in normal monitor mode.
+commands_enabled = true
+command_poll_seconds = 5
