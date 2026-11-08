@@ -40,6 +40,9 @@ class ConsoleNotifier:
             return ""
         return f" [{' | '.join(annotation.labels)}]"
 
+    def report_scan_error(self, error: str) -> None:
+        print(f"[SCAN-FEHLER] {error}", flush=True)
+
     def notify(
         self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None
     ) -> None:

@@ -294,6 +294,10 @@ async def run_forever(
             changes = await run_once(settings, storage, scanner, notifier)
         except Exception as error:
             LOG.exception("scan failed; stored appointment snapshot was left untouched")
+            try:
+                notifier.report_scan_error(str(error))
+            except Exception:
+                LOG.exception("scan error notification failed")
             if command_client is not None:
                 for chat_id in set(scan_requesters):
                     await asyncio.to_thread(command_client.send_scan_failure, chat_id, str(error))

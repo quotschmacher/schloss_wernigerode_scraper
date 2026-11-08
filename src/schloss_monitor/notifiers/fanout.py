@@ -18,6 +18,10 @@ class FanoutNotifier:
         for notifier in self.notifiers:
             notifier.report_slots(appointments, annotations)
 
+    def report_scan_error(self, error: str) -> None:
+        for notifier in self.notifiers:
+            notifier.report_scan_error(error)
+
     def notify(
         self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None
     ) -> None:

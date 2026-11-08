@@ -90,6 +90,13 @@ class TelegramNotifier:
         del appointments, annotations
         return None
 
+    def report_scan_error(self, error: str) -> None:
+        if not self.enabled:
+            return
+        if not self.bot_token or not self.chat_id:
+            raise TelegramApiError("Telegram notifier requires bot token and chat ID")
+        self._send_message(f"[FEHLER] Scan fehlgeschlagen: {error[:1000]}")
+
     def notify(
         self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None
     ) -> None:
@@ -108,18 +115,21 @@ class TelegramNotifier:
             self._send_batch(alerts, annotations or {})
 
     def _send_batch(self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation]) -> None:
+        for message in self._message_texts(changes, annotations):
+            self._send_message(message)
+
+    def _send_message(self, message: str) -> None:
         assert self.bot_token is not None
         assert self.chat_id is not None
         url = f"https://api.telegram.org/bot{quote(self.bot_token, safe='')}/sendMessage"
-        for message in self._message_texts(changes, annotations):
-            body = urlencode(
-                {
-                    "chat_id": self.chat_id,
-                    "text": message,
-                    "disable_web_page_preview": "true",
-                }
-            ).encode()
-            _telegram_response(self.post_transport(url, body), "sendMessage")
+        body = urlencode(
+            {
+                "chat_id": self.chat_id,
+                "text": message,
+                "disable_web_page_preview": "true",
+            }
+        ).encode()
+        _telegram_response(self.post_transport(url, body), "sendMessage")
 
     @staticmethod
     def _message_texts(
@@ -157,12 +167,17 @@ class TelegramNotifier:
             weekday = weekdays[appointment.start_at.weekday()]
             when = appointment.start_at.strftime("%d.%m.%Y, %H:%M")
             label = "NEU" if change.kind is ChangeType.NEW else "MEHR"
+            places = (
+                f"{change.previous_available_places} → {appointment.available_places} freie Plätze"
+                if change.kind is ChangeType.INCREASED
+                else f"{appointment.available_places} freie Plätze"
+            )
             annotation = annotations.get(appointment.event_key)
             markers = f" [{' | '.join(annotation.labels)}]" if annotation and annotation.labels else ""
             entries.append(
                 "\n".join(
                     [
-                        f"• [{label}] {weekday}, {when} – {appointment.available_places} freie Plätze{markers}",
+                        f"• [{label}] {weekday}, {when} – {places}{markers}",
                         appointment.booking_url,
                     ]
                 )

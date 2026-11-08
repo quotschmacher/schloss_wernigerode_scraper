@@ -91,9 +91,29 @@ def test_telegram_notifier_batches_alertable_changes_into_one_structured_message
     assert "Neue freie Plätze" in message
     assert "[NEU] Dienstag, 10.11.2026, 11:30 – 5 freie Plätze" in message
     assert "[WOCHENENDE | SCHULFERIEN: Herbstferien]" in message
-    assert "[MEHR] Dienstag, 10.11.2026, 14:30 – 7 freie Plätze" in message
+    assert "[MEHR] Dienstag, 10.11.2026, 14:30 – 3 → 7 freie Plätze" in message
     assert "https://example.test/booking/1130" in message
     assert "https://example.test/booking/1430" in message
+
+
+def test_telegram_notifier_reports_scan_errors() -> None:
+    sent: list[tuple[str, bytes]] = []
+
+    def post_transport(url: str, body: bytes) -> bytes:
+        sent.append((url, body))
+        return b'{"ok":true,"result":{"message_id":1}}'
+
+    notifier = TelegramNotifier(
+        enabled=True,
+        bot_token="test-token",
+        chat_id="123456",
+        post_transport=post_transport,
+    )
+
+    notifier.report_scan_error("Ticketfritz timeout")
+
+    message = parse_qs(sent[0][1].decode())["text"][0]
+    assert message == "[FEHLER] Scan fehlgeschlagen: Ticketfritz timeout"
 
 
 def test_telegram_notifier_splits_large_alert_batches_within_telegram_limit() -> None:

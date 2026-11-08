@@ -173,6 +173,31 @@ async def test_run_forever_acknowledges_manual_scan_completion(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_run_forever_reports_scan_errors_to_notifier(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = load_settings(config)
+    storage = MonitorStorage(tmp_path / "db.sqlite3")
+    stop_event = asyncio.Event()
+
+    class FailingScanner:
+        async def scan(self):
+            raise RuntimeError("Ticketfritz timeout")
+
+    class ErrorNotifier:
+        def report_scan_error(self, error: str) -> None:
+            assert error == "Ticketfritz timeout"
+            stop_event.set()
+
+    await asyncio.wait_for(
+        run_forever(settings, storage, FailingScanner(), ErrorNotifier(), stop_event),
+        timeout=0.2,
+    )
+
+    storage.close()
+
+
+@pytest.mark.asyncio
 async def test_monitor_loop_exits_when_stop_event_is_set(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
