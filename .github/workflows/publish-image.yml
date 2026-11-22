@@ -1,8 +1,9 @@
 name: Publish container image
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: read
@@ -10,6 +11,9 @@ permissions:
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io

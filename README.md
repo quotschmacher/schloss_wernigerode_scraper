@@ -67,22 +67,6 @@ Jeder Push nach `main` veröffentlicht:
 
 Für reproduzierbare Deployments den vollständigen Commit-SHA verwenden.
 
-### GHCR-Paket öffentlich schalten
-
-Repository-Sichtbarkeit und GHCR-Paket-Sichtbarkeit werden getrennt verwaltet:
-
-1. In GitHub **Packages** → `schloss_wernigerode_scraper` öffnen.
-2. **Package settings** → **Change visibility** → **Public**.
-3. Danach kann das Image anonym gezogen werden.
-
-Solange das Paket privat ist:
-
-```bash
-docker login ghcr.io
-docker compose pull
-docker compose up -d
-```
-
 > Immer `./data:/data` mounten, nie die einzelne SQLite-Datei. Eine fehlende Datei wird automatisch angelegt, sofern das Verzeichnis beschreibbar ist.
 
 ## Konfiguration
@@ -104,6 +88,31 @@ Priorität: CLI-Argumente → Umgebungsvariablen → `config.toml` → Defaults.
 | `TELEGRAM_CHAT_ID` | – | erlaubter Empfänger- und Kommandchat |
 
 `.env.example` ist die sichere Vorlage für Laufzeitvariablen. `config.example.toml` wird beim Container-Build als Standardkonfiguration verwendet.
+
+### Bundesländer für den Ferienabgleich
+
+`MONITOR_FEDERAL_STATE` erwartet den URL-Slug von schulferien.org. Unterstützt werden:
+
+| Bundesland | Wert |
+|---|---|
+| Baden-Württemberg | `baden-wuerttemberg` |
+| Bayern | `bayern` |
+| Berlin | `berlin` |
+| Brandenburg | `brandenburg` |
+| Bremen | `bremen` |
+| Hamburg | `hamburg` |
+| Hessen | `hessen` |
+| Mecklenburg-Vorpommern | `mecklenburg-vorpommern` |
+| Niedersachsen | `niedersachsen` |
+| Nordrhein-Westfalen | `nordrhein-westfalen` |
+| Rheinland-Pfalz | `rheinland-pfalz` |
+| Saarland | `saarland` |
+| Sachsen | `sachsen` |
+| Sachsen-Anhalt | `sachsen-anhalt` |
+| Schleswig-Holstein | `schleswig-holstein` |
+| Thüringen | `thueringen` |
+
+Der Ferienkalender wird nach einem erfolgreichen Termin-Scan geladen. Fällt diese Quelle aus, bleiben Wochenendmarker verfügbar; der Termin-Scan selbst bleibt gültig.
 
 ## Telegram
 
@@ -183,17 +192,6 @@ Schloss-Kalender ──► Detailseiten ──► Ticketfritz getEvents
 - Bei 403, 429, CAPTCHA oder unvollständigen Antworten wird nichts umgangen.
 - `.env`, `config.toml`, SQLite-Daten und Zertifikate sind durch `.gitignore` ausgeschlossen.
 - Sicherheitslücken oder versehentlich veröffentlichte Geheimnisse nicht als öffentliches Issue melden. Siehe [SECURITY.md](SECURITY.md).
-
-## Open-Source-Veröffentlichung
-
-Vor dem Umschalten des Repositories auf **Public**:
-
-- [x] Keine `.env`, Laufzeitkonfiguration oder SQLite-Daten versioniert.
-- [x] Tracked-Dateien und Git-Historie auf typische Tokenmuster geprüft.
-- [x] Container-Build, Tests und Linter erfolgreich.
-- [x] Lizenz, Sicherheitsrichtlinie und Beitragsleitfaden vorhanden.
-- [ ] Repository-Sichtbarkeit in GitHub auf **Public** umstellen.
-- [ ] GHCR-Paket separat auf **Public** umstellen, wenn anonymer Image-Pull gewünscht ist.
 
 ## Lizenz
 
