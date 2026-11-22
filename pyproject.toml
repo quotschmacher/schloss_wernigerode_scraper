@@ -7,11 +7,24 @@ name = "schloss-wernigerode-monitor"
 version = "0.1.0"
 description = "Read-only monitor for public appointments at Schloss Wernigerode"
 readme = "README.md"
+license = { text = "MIT" }
+keywords = ["appointments", "monitoring", "playwright", "telegram", "wernigerode"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Browsers",
+]
 requires-python = ">=3.12"
 dependencies = [
   "beautifulsoup4>=4.12,<5",
   "playwright==1.58.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/quotschmacher/schloss_wernigerode_scraper"
+Issues = "https://github.com/quotschmacher/schloss_wernigerode_scraper/issues"
 
 [project.optional-dependencies]
 dev = [
