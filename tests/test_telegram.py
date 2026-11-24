@@ -110,10 +110,14 @@ def test_telegram_notifier_reports_scan_errors() -> None:
         post_transport=post_transport,
     )
 
-    notifier.report_scan_error("Ticketfritz timeout")
+    notifier.report_scan_error(
+        "APIRequestContext.get: Timeout 30000ms exceeded.\nCall log:\n- cookie: private-session"
+    )
 
     message = parse_qs(sent[0][1].decode())["text"][0]
-    assert message == "[FEHLER] Scan fehlgeschlagen: Ticketfritz timeout"
+    assert message == "[FEHLER] Scan fehlgeschlagen: APIRequestContext.get: Timeout 30000ms exceeded."
+    assert "cookie" not in message
+    assert "Call log" not in message
 
 
 def test_telegram_notifier_splits_large_alert_batches_within_telegram_limit() -> None:

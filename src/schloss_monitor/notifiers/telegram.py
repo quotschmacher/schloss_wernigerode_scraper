@@ -95,7 +95,11 @@ class TelegramNotifier:
             return
         if not self.bot_token or not self.chat_id:
             raise TelegramApiError("Telegram notifier requires bot token and chat ID")
-        self._send_message(f"[FEHLER] Scan fehlgeschlagen: {error[:1000]}")
+        self._send_message(f"[FEHLER] Scan fehlgeschlagen: {self._safe_error_summary(error)}")
+
+    @staticmethod
+    def _safe_error_summary(error: str) -> str:
+        return error.splitlines()[0].strip()[:500]
 
     def notify(
         self, changes: Sequence[Change], annotations: Mapping[str, SlotAnnotation] | None = None

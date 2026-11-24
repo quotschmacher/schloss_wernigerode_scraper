@@ -8,7 +8,7 @@ import signal
 from pathlib import Path
 
 from .config import ConfigError, load_settings
-from .monitor import PlaywrightScanner, run_forever, run_once
+from .monitor import PlaywrightScanner, error_summary, run_forever, run_once
 from .notifiers.console import ConsoleNotifier
 from .notifiers.fanout import FanoutNotifier
 from .notifiers.telegram import (
@@ -68,6 +68,7 @@ def main() -> int:
     except StorageError as error:
         logging.error("storage error: %s", error)
         return 2
+    notifier: FanoutNotifier | None = None
     try:
         scanner = PlaywrightScanner(settings)
         console_notifier = ConsoleNotifier()
@@ -87,8 +88,14 @@ def main() -> int:
             asyncio.run(_run_until_shutdown(settings, storage, scanner, notifier, command_client))
     except KeyboardInterrupt:
         logging.info("shutdown requested")
-    except Exception:
-        logging.exception("monitor stopped after scan error")
+    except Exception as error:
+        summary = error_summary(error)
+        logging.error("monitor stopped after scan error: %s", summary)
+        if notifier is not None:
+            try:
+                notifier.report_scan_error(summary)
+            except Exception:
+                logging.exception("scan error notification failed")
         return 1
     finally:
         storage.close()

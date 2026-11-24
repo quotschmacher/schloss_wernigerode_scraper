@@ -7,6 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from schloss_monitor.config import load_settings
 from schloss_monitor.models import Appointment, AppointmentStatus, Availability, CountSource
@@ -182,7 +183,7 @@ async def test_run_forever_reports_scan_errors_to_notifier(tmp_path: Path) -> No
 
     class FailingScanner:
         async def scan(self):
-            raise RuntimeError("Ticketfritz timeout")
+            raise RuntimeError("Ticketfritz timeout\nCall log:\n- cookie: private-session")
 
     class ErrorNotifier:
         def report_scan_error(self, error: str) -> None:
@@ -240,6 +241,28 @@ class CookiePage:
     def get_by_role(self, role: str, name: str) -> CookieButton:
         assert (role, name) == ("button", "Nur Auswahl bestätigen")
         return CookieButton()
+
+
+@pytest.mark.asyncio
+async def test_booking_timeout_keeps_detail_page_slot_available_with_unknown_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(Path("config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    scanner = PlaywrightScanner(load_settings(config))
+    start_at = datetime(2026, 12, 1, 14, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+
+    async def timeout(*args, **kwargs):
+        del args, kwargs
+        raise PlaywrightTimeoutError("APIRequestContext.get: Timeout 30000ms exceeded.")
+
+    monkeypatch.setattr(scanner, "_booking_availability", timeout)
+
+    availability = await scanner._detail_slot_availability(object(), "https://example.test/booking", start_at)
+
+    assert availability.status is AppointmentStatus.AVAILABLE
+    assert availability.available_places is None
+    assert availability.source is CountSource.UNKNOWN
 
 
 @pytest.mark.asyncio

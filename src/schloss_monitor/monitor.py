@@ -49,6 +49,10 @@ class ScanError(RuntimeError):
     """A scan was incomplete and must not replace the stored snapshot."""
 
 
+def error_summary(error: BaseException | str) -> str:
+    return str(error).splitlines()[0].strip()[:500]
+
+
 @dataclass(frozen=True)
 class ScanResult:
     appointments: list[Appointment]
@@ -87,8 +91,9 @@ class PlaywrightScanner:
                         timeout=self.settings.scraper.navigation_timeout_ms,
                     )
                     for slot in parse_detail_slots(await detail_page.content(), entry.detail_url):
-                        availability = self._availability_for_detail_slot(
-                            await self._booking_availability(booking_page, slot.booking_url, slot.start_at),
+                        availability = await self._detail_slot_availability(
+                            booking_page,
+                            slot.booking_url,
                             slot.start_at,
                         )
                         event_key = f"magische-tiere-{slot.start_at:%Y-%m-%d-%H%M}"
@@ -126,6 +131,20 @@ class PlaywrightScanner:
             appointment.event_key: by_date.get(appointment.start_at.date(), fallback[appointment.start_at.date()])
             for appointment in appointments
         }
+
+    async def _detail_slot_availability(
+        self, page: Page, booking_url: str, start_at: datetime
+    ) -> Availability:
+        try:
+            availability = await self._booking_availability(page, booking_url, start_at)
+        except PlaywrightTimeoutError:
+            LOG.warning(
+                "Ticketfritz availability request timed out; recording detail-page slot as available with unknown count "
+                "start_at=%s",
+                start_at.isoformat(),
+            )
+            availability = Availability(AppointmentStatus.UNKNOWN, None, CountSource.UNKNOWN)
+        return self._availability_for_detail_slot(availability, start_at)
 
     @staticmethod
     def _availability_for_detail_slot(availability: Availability, start_at: datetime) -> Availability:
@@ -226,7 +245,7 @@ async def run_once(settings: Settings, storage: MonitorStorage, scanner: Playwri
     try:
         result = await scanner.scan()
     except Exception as error:
-        storage.record_failed_scan(str(error))
+        storage.record_failed_scan(error_summary(error))
         raise
     notifier.report_slots(result.appointments, result.annotations)
     changes = storage.preview_successful_scan(result.appointments, result.protected_dates)
@@ -293,14 +312,15 @@ async def run_forever(
         try:
             changes = await run_once(settings, storage, scanner, notifier)
         except Exception as error:
-            LOG.exception("scan failed; stored appointment snapshot was left untouched")
+            summary = error_summary(error)
+            LOG.error("scan failed; stored appointment snapshot was left untouched reason=%s", summary)
             try:
-                notifier.report_scan_error(str(error))
+                notifier.report_scan_error(summary)
             except Exception:
                 LOG.exception("scan error notification failed")
             if command_client is not None:
                 for chat_id in set(scan_requesters):
-                    await asyncio.to_thread(command_client.send_scan_failure, chat_id, str(error))
+                    await asyncio.to_thread(command_client.send_scan_failure, chat_id, summary)
         else:
             if command_client is not None:
                 for chat_id in set(scan_requesters):
