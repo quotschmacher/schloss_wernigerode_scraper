@@ -81,7 +81,7 @@ def test_storage_persists_telegram_update_offset(tmp_path: Path) -> None:
 def test_storage_persists_calendar_annotations_for_database_lists(tmp_path: Path) -> None:
     storage = MonitorStorage(tmp_path / "appointments.sqlite3")
     item = appointment("magische-tiere-2026-11-10-11", 5)
-    annotations = {item.event_key: SlotAnnotation(True, ("Herbstferien",))}
+    annotations = {item.event_key: SlotAnnotation(True, ("Herbstferien",), ("Heilige Drei Könige",))}
 
     storage.commit_successful_scan([item], annotations=annotations)
 

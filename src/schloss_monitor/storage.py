@@ -61,11 +61,20 @@ class MonitorStorage:
             CREATE TABLE IF NOT EXISTS appointment_annotations (
                 event_key TEXT PRIMARY KEY,
                 is_weekend INTEGER NOT NULL,
-                holiday_names TEXT NOT NULL
+                holiday_names TEXT NOT NULL,
+                public_holiday_names TEXT NOT NULL DEFAULT '[]'
             );
             """
         )
         self.connection.commit()
+        annotation_columns = {
+            row["name"] for row in self.connection.execute("PRAGMA table_info(appointment_annotations)").fetchall()
+        }
+        if "public_holiday_names" not in annotation_columns:
+            with self.connection:
+                self.connection.execute(
+                    "ALTER TABLE appointment_annotations ADD COLUMN public_holiday_names TEXT NOT NULL DEFAULT '[]'"
+                )
 
     def close(self) -> None:
         self.connection.close()
@@ -80,6 +89,7 @@ class MonitorStorage:
             row["event_key"]: SlotAnnotation(
                 is_weekend=bool(row["is_weekend"]),
                 holiday_names=tuple(json.loads(row["holiday_names"])),
+                public_holiday_names=tuple(json.loads(row["public_holiday_names"])),
             )
             for row in rows
         }
@@ -166,13 +176,15 @@ class MonitorStorage:
                 if annotation is not None:
                     self.connection.execute(
                         """
-                        INSERT INTO appointment_annotations (event_key, is_weekend, holiday_names)
-                        VALUES (?, ?, ?)
+                        INSERT INTO appointment_annotations (
+                            event_key, is_weekend, holiday_names, public_holiday_names
+                        ) VALUES (?, ?, ?, ?)
                         """,
                         (
                             appointment.event_key,
                             int(annotation.is_weekend),
                             json.dumps(annotation.holiday_names),
+                            json.dumps(annotation.public_holiday_names),
                         ),
                     )
         return changes

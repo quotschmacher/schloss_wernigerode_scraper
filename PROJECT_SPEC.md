@@ -51,7 +51,7 @@ Keinesfalls 11:30 und 14:00 unter einem einzigen Datensatz zusammenfassen.
 - **Eindeutige Terminidentität:** Kombination aus normiertem Veranstaltungskennzeichen (`magische-tiere`), lokalem Kalendertag und Uhrzeit `HH:MM`. Falls offizielle eindeutige Event-IDs vorhanden sind, zusätzlich speichern; volatile Buchungslinks nicht als alleinigen Primärschlüssel verwenden.
 - **Status:** `AVAILABLE`, `SOLD_OUT`, `UNKNOWN`, optional `NO_LONGER_LISTED`/`SKIPPED` als klar getrennte Beobachtungszustände. **Zahl unbekannt** (`NULL`) ist nicht gleich **null freie Plätze** (`0`).
 - **Zeit:** `start_at` in lokaler Zone `Europe/Berlin`; `first_seen_at`, `last_seen_at`, `last_changed_at` in UTC.
-- **Kalendermarkierungen:** Termine an Samstag/Sonntag tragen `WOCHENENDE`. Zusätzlich werden sie mit den Schulferien des konfigurierten Bundeslands abgeglichen und ggf. mit `SCHULFERIEN: <Ferienart>` markiert.
+- **Kalendermarkierungen:** Termine an Samstag/Sonntag tragen `WOCHENENDE`. Zusätzlich werden sie mit den Schulferien und gesetzlichen Feiertagen des konfigurierten Bundeslands abgeglichen und ggf. mit `SCHULFERIEN: <Ferienart>` bzw. `FEIERTAG: <Name>` markiert.
 - **Quellen:** Detail- und Buchungslink; dokumentierte Quelle der verfügbaren Menge (falls vorhanden).
 
 ### Ausgabe bei jedem erfolgreichen Scan

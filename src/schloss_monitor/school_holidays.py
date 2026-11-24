@@ -6,6 +6,7 @@ from datetime import date
 from urllib.request import Request, urlopen
 
 from bs4 import BeautifulSoup
+from holidays import country_holidays
 
 _DATE_TOKEN = re.compile(r"(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\.?" )
 _HOLIDAY_NAMES = {
@@ -15,6 +16,24 @@ _HOLIDAY_NAMES = {
     "Sommer": "Sommerferien",
     "Herbst": "Herbstferien",
     "Weihnachten": "Weihnachtsferien",
+}
+_FEDERAL_STATE_CODES = {
+    "baden-wuerttemberg": "BW",
+    "bayern": "BY",
+    "berlin": "BE",
+    "brandenburg": "BB",
+    "bremen": "HB",
+    "hamburg": "HH",
+    "hessen": "HE",
+    "mecklenburg-vorpommern": "MV",
+    "niedersachsen": "NI",
+    "nordrhein-westfalen": "NW",
+    "rheinland-pfalz": "RP",
+    "saarland": "SL",
+    "sachsen": "SN",
+    "sachsen-anhalt": "ST",
+    "schleswig-holstein": "SH",
+    "thueringen": "TH",
 }
 
 
@@ -29,12 +48,14 @@ class HolidayRange:
 class SlotAnnotation:
     is_weekend: bool
     holiday_names: tuple[str, ...]
+    public_holiday_names: tuple[str, ...] = ()
 
     @property
     def labels(self) -> tuple[str, ...]:
         labels: list[str] = []
         if self.is_weekend:
             labels.append("WOCHENENDE")
+        labels.extend(f"FEIERTAG: {name}" for name in self.public_holiday_names)
         labels.extend(f"SCHULFERIEN: {name}" for name in self.holiday_names)
         return tuple(labels)
 
@@ -97,11 +118,24 @@ def parse_school_holidays(html: str, federal_state: str) -> SchoolHolidayCalenda
     return SchoolHolidayCalendar(federal_state=federal_state, ranges=tuple(ranges))
 
 
+def _public_holiday_names(value: date, federal_state: str) -> tuple[str, ...]:
+    state_code = _FEDERAL_STATE_CODES.get(federal_state)
+    if state_code is None:
+        raise SchoolHolidayError(f"unsupported federal state: {federal_state}")
+    holidays = country_holidays("DE", subdiv=state_code, years=[value.year], language="de")
+    holiday_name = holidays.get(value)
+    return (holiday_name,) if isinstance(holiday_name, str) else ()
+
+
 def annotations_for_dates(
     values: list[date], calendar: SchoolHolidayCalendar
 ) -> dict[date, SlotAnnotation]:
     return {
-        value: SlotAnnotation(value.weekday() >= 5, calendar.names_for(value))
+        value: SlotAnnotation(
+            value.weekday() >= 5,
+            calendar.names_for(value),
+            _public_holiday_names(value, calendar.federal_state),
+        )
         for value in set(values)
     }
 

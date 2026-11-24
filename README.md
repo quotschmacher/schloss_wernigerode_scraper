@@ -14,7 +14,7 @@ Der Monitor liest den öffentlichen Kalender, prüft pro buchbarem Einzeltermin 
 - Keine Schätzung aus Kapazität, Warenkorb-Limit oder Preisstufe.
 - SQLite-basierte Änderungserkennung für neue Termine, mehr/weniger Plätze, Ausbuchungen und unbekannte Mengen.
 - Konsolenausgabe aller aktuell freien Termine nach jedem erfolgreichen Scan.
-- Markierungen für `WOCHENENDE` und `SCHULFERIEN: <Ferienart>`.
+- Markierungen für `WOCHENENDE`, `FEIERTAG: <Name>` und `SCHULFERIEN: <Ferienart>`.
 - Optionale Telegram-Alerts sowie `/scan`, `/list` und `/help`.
 - Container-basierte Entwicklung, Tests und Betrieb; kein Host-Python erforderlich.
 
@@ -112,7 +112,7 @@ Priorität: CLI-Argumente → Umgebungsvariablen → `config.toml` → Defaults.
 | Schleswig-Holstein | `schleswig-holstein` |
 | Thüringen | `thueringen` |
 
-Der Ferienkalender wird nach einem erfolgreichen Termin-Scan geladen. Fällt diese Quelle aus, bleiben Wochenendmarker verfügbar; der Termin-Scan selbst bleibt gültig.
+Der Ferienkalender wird nach einem erfolgreichen Termin-Scan geladen. Gesetzliche Feiertage werden lokal aus dem konfigurierten Bundesland berechnet; der 6. Januar 2027 wird beispielsweise in Sachsen-Anhalt als `FEIERTAG: Heilige Drei Könige` markiert. Fällt die Ferienquelle aus, bleiben Wochenend- und Feiertagsmarker verfügbar; der Termin-Scan selbst bleibt gültig.
 
 ## Telegram
 
